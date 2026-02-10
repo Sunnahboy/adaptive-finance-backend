@@ -1,0 +1,30 @@
+{
+  "model_type": "LinUCB",
+  "actions": {
+    "0": "strict_budget",
+    "1": "streak_builder",
+    "2": "quiz",
+    "3": "cool_off"
+  },
+  "reward_config": {
+    "volatility_threshold": 0.8,
+    "return_threshold": 0.15,
+    "low_engagement_threshold": 10,
+    "high_value_threshold": 50
+  },
+  "training_config": {
+    "alpha": 0.5,
+    "allow_diagonal": false,
+    "decay_factor": 1.0,
+    "decay_strategy": "interpolation",
+    "use_teacher_forcing": true
+  },
+  "metrics": {
+    "accuracy": 0.7240592930444698,
+    "avg_regret": 0.07297605473204105,
+    "training_samples": 3504,
+    "test_samples": 877,
+    "training_time_seconds": 2.2087996006011963,
+    "timestamp": 1770652018.3339236
+  }
+}
