@@ -1,5 +1,4 @@
-# Editable install with no version control (adaptive_finance_ai==0.1.0)
--e d:\third_year\fyp\adaptive_finance_ai
+
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.12.1
