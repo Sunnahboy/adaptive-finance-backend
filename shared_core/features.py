@@ -12,7 +12,7 @@ def calculate_user_features(df: pd.DataFrame) -> pd.DataFrame:
     # 1. Safety Copy
     df = df.copy()
     
-    # 2. Robust Date Conversion (FIXED for StringDtype compatibility)
+    # 2. Robust Date Conversion 
     if not is_datetime64_any_dtype(df['InvoiceDate']):
         df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'], errors='coerce')
 
@@ -31,7 +31,7 @@ def calculate_user_features(df: pd.DataFrame) -> pd.DataFrame:
         quantity_std=("Quantity", "std"),
     )
     
-    # Fix NaN std for users with only 1 transaction
+    # NaN std for users with only 1 transaction
     features["quantity_std"] = features["quantity_std"].fillna(0.0)
 
     # ------------------------------
@@ -47,7 +47,7 @@ def calculate_user_features(df: pd.DataFrame) -> pd.DataFrame:
     # ------------------------------
     # 3. Spending Volatility
     # ------------------------------
-    # Improved: Use .dt.date instead of string slicing for safety
+    # Use .dt.date instead of string slicing for safety
     df['day'] = df['InvoiceDate'].dt.date
     
     # Calculate daily spend sum per customer
