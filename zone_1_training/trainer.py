@@ -1,13 +1,11 @@
 
-
-
 import sys
 import time
 import pickle
 import json
 import os
 from pathlib import Path
-from typing import Dict, Tuple, Optional, List, Sequence, Any
+from typing import Dict, Tuple, Optional, List, Sequence
 
 import numpy as np
 import pandas as pd
@@ -50,7 +48,16 @@ ACTIONS: Dict[int, str] = {
     2: "quiz",
     3: "cool_off",
 }
-PRIORITY_ORDER: List[int] = [3, 0, 2, 1]
+
+#prevents logic errors in case of actions are reordered
+ACTION_MAP =  {v: k for k, v in ACTIONS.items()}
+# Dynamic priority
+PRIORITY_ORDER: List[int] = [
+    ACTION_MAP["cool_off"],
+    ACTION_MAP["strict_budget"],
+    ACTION_MAP["quiz"],
+    ACTION_MAP["streak_builder"]
+]
 
 REWARD_CONFIG = {
     "volatility_threshold": 0.8,
@@ -61,7 +68,7 @@ REWARD_CONFIG = {
 
 # hyperparameters 
 TRAINING_CONFIG = {
-    "alpha": 0.5,                # Exploration parameter
+    "alpha": 0.5,                # High exploration for bootstrapping (prevent overconfidence)
     "allow_diagonal": False,     # Full covariance matrix for accuracy
     "decay_factor": 1.0,         
     "decay_strategy": "interpolation",
@@ -84,13 +91,17 @@ def get_synthetic_reward(feats: Dict, arm_idx: int) -> float:
     count = feats.get("transaction_count", 0.0)
     avg_txn = feats.get("avg_transaction_value", 0.0)
 
-    if arm_idx == 3 and ret > REWARD_CONFIG["return_threshold"]: 
+    # High returns  cool off
+    if arm_idx ==  ACTION_MAP["cool_off"] and ret > REWARD_CONFIG["return_threshold"]: 
         return 1.0
-    if arm_idx == 0 and vol > REWARD_CONFIG["volatility_threshold"]: 
+    # High volatility strict budget 
+    if arm_idx == ACTION_MAP["strict_budget"] and vol > REWARD_CONFIG["volatility_threshold"]: 
         return 1.0
-    if arm_idx == 2 and (0.05 < ret <= REWARD_CONFIG["return_threshold"] or avg_txn > REWARD_CONFIG["high_value_threshold"]): 
+    #moderate returns or high spender quiz (educational)
+    if arm_idx == ACTION_MAP["quiz"] and (0.05 < ret <= REWARD_CONFIG["return_threshold"] or avg_txn > REWARD_CONFIG["high_value_threshold"]): 
         return 1.0
-    if arm_idx == 1 and 0 < count < REWARD_CONFIG["low_engagement_threshold"]: 
+    #Low activity streak builder ( Gamification)
+    if arm_idx == ACTION_MAP["streak_builder"] and 0 < count < REWARD_CONFIG["low_engagement_threshold"]: 
         return 1.0
     
     return 0.0
@@ -110,14 +121,14 @@ def pre_calculate_strategy_labels(df: pd.DataFrame) -> Dict[int, str]:
     vols = df["spending_volatility"].values
     rets = df["return_rate"].values
     indices = df.index.values
-
+     # Vectorized check : if user is risky (high vol or high returns) we enforce exploration
     labels = np.where((vols > vol_thresh) | (rets > ret_thresh), "EXPLORE", "EXPLOIT")
     return dict(zip(indices, labels))
 
 # ===== MAIN TRAINING LOOP =====
 def train_and_validate() -> None:
     print("=" * 70)
-    print("ADAPTIVE FINANCE AI - OPTIMIZED TRAINING PIPELINE")
+    print("ADAPTIVE FINANCE AI - ROBUST TRAINING PIPELINE")
     print("=" * 70)
     print(f"NumPy version: {np.__version__}")
     print(f"Random state: {np.random.randint(0, 1000)}")
@@ -214,10 +225,14 @@ def train_and_validate() -> None:
         # SUPERIOR teacher forcing logic
         # Key difference: Only teach during EXPLOIT, not EXPLORE
         if reward > 0.0:
+            # if the bandit got it right , reinforce it
             bandit.update(chosen_arm, ctx_vec, reward)
         else:
-            if strategy == "EXPLOIT":  # ← ONLY during EXPLOIT phase
+            # if wrong, only correct it during the exploit phase
+            if strategy == "EXPLOIT": 
+                #1. punish the wrong choice
                 bandit.update(chosen_arm, ctx_vec, 0.0)
+                #2. Teach the correct choice (oracle update)
                 if TRAINING_CONFIG["use_teacher_forcing"]:
                     best_arm, best_r = find_best_arm_by_priority(feats)
                     if best_arm is not None and best_arm != chosen_arm:
@@ -287,6 +302,7 @@ def train_and_validate() -> None:
     config_data = {
         "model_type": "LinUCB",
         "actions": ACTIONS,
+        "action_map": ACTION_MAP, # save for reference
         "reward_config": REWARD_CONFIG,
         "training_config": TRAINING_CONFIG,
         "metrics": {
