@@ -1,7 +1,8 @@
 
 from pydantic import BaseModel, Field, ConfigDict
+import pandas as pd
 
-# 1. The Features (Strict Rules)
+# 1. The Features (Strict Rules) but currency safe
 class UserFeatures(BaseModel):
     """
     The mathematical input for the Bandit Model.
@@ -11,7 +12,6 @@ class UserFeatures(BaseModel):
     spending_volatility: float = Field(
         ..., 
         ge=0.0, 
-        le=20000.0, # Reasonable cap to prevent outliers
         description="Standard deviation of daily spending (Risk Metric)"
     )
     return_rate: float = Field(
@@ -48,6 +48,17 @@ class UserFeatures(BaseModel):
 class PredictionRequest(BaseModel):
     user_id: str = Field(..., min_length=1, description="Unique User Identifier")
     features: UserFeatures
+    # Helper method to bridge API to AI
+    def to_dataframe(self) -> pd.DataFrame:
+        """
+        convert the request features directly into a pandas dataframe
+        compatible with the BanditPreprocessor
+        
+        """
+        # Convert nested model to dict
+        data = self.features.model_dump()
+        #create a  dataframe with one row
+        return pd.DataFrame([data])
 
 # 3. The Response (What Android receives)
 class PredictionResponse(BaseModel):
