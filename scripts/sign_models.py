@@ -34,8 +34,10 @@ def load_signing_key(root_path: Path) -> bytes:
     key = os.getenv("MODEL_SIGNING_KEY")
    
     if not key:
-        raise ValueError("FATAL: MODEL_SIGNING_KEY not found in env!")
-    return key.encode()
+        logger.error("FATAL: MODEL_SIGNING_KEY not found in env!")
+        sys.exit(1)
+    #stripe whitespaces from CI?CD secrets
+    return key.strip().encode()
 
 def sign_file(file_path: Path, key: bytes) -> bool:
     """
@@ -98,7 +100,11 @@ def main():
         logger.info(f"No files provided. Scanning default artifacts dir: {artifacts_path}")
         
         defaults = ["bandit_model.pkl", "cmab_preprocessor.pkl"]
-        files_to_sign = [artifacts_path / f for f in defaults]
+        # only add files that actually exist
+        files_to_sign = [artifacts_path / f for f in defaults if (artifacts_path / f).exists()]
+
+        if not files_to_sign:
+            logger.warning("No default artifacts found to sign.")
 
     # Execution Loop
     print("-" * 40)
