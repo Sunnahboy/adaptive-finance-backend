@@ -57,14 +57,24 @@ async def verify_api_key(api_key: str = Security(api_key_header)):
 # 4. LIFECYCLE MANAGER
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    Handles startup and shutdown events.
+    includes Async Database Warmup!
+    """
     logger.info(" Server starting up...")
     
-    # Load Models
+    #1. Load sync Artifacts (Pickle files)
+    # We do this first so that the advisor object exists
     success = prediction_service.load_resources()
     if not success:
         logger.critical(" FATAL: AI Models failed to load! Readiness probe will fail.")
     else:
-        logger.info(" Hybrid AI Brain loaded and ready.")
+        # 2 . Initialize Async database
+        # we must wait this cause creating tables is an async I?O operation
+        if prediction_service.advisor:
+            await prediction_service.advisor.WARMUP()
+            logger.info(" Async DB Warmed up and ready.")
+        logger.info("Hybrid AI Brain loaded and ready")
         
     yield
     
