@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, RobustScaler
+from sklearn.preprocessing import OneHotEncoder,  RobustScaler, FunctionTransformer
 from sklearn.compose import ColumnTransformer
 
 @dataclass
@@ -16,7 +16,7 @@ class BanditPreprocessorConfig:
 class BanditPreprocessor:
     """
     preprocessing pipeline.
-    Includes feature mapping for Explainable AI (XAI).
+    uses RobustScaler to prevent over spenders form squashing features variance
     """
     def __init__(self, config: BanditPreprocessorConfig):
         self.config = config
@@ -24,12 +24,14 @@ class BanditPreprocessor:
 
     def _build_pipeline(self) -> Pipeline:
         # 1. Numeric Pipeline
-        #  Used RobustScaler instead of MinMaxScaler
-        # Financial data has huge outliers (billionaires vs students). 
-        # MinMaxScaler squashes normal data to 0. RobustScaler uses quantiles.
+        #We use Log1p to handle the massive skew in financial data
+        #then RobustScalar to center data on Median?IQR, ignoring outliers.
+    
         num_pipe = Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", MinMaxScaler(feature_range=(0, 1))), 
+            #normalize  distribution
+            ("log_transform",FunctionTransformer(np.log1p,validate=False)),
+            ("scaler", RobustScaler()), 
         ])
 
         # 2. Categorical Pipeline
