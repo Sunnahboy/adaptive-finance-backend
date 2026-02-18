@@ -5,9 +5,10 @@ import hmac
 import hashlib
 import os
 import logging
+import json
 import pandas as pd  
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
 from fastapi.concurrency import run_in_threadpool
 
 # CLEAN IMPORTS (Assumes 'pip install -e .' was run)
@@ -34,17 +35,22 @@ class PredictionService:
         self.preprocessor: Optional[BanditPreprocessor] = None
         self.advisor: Optional[LLMStrategyAdvisor] = None
         
-        # Action Map (Must match Trainer)
-        self.actions = {0: "strict_budget", 1: "streak_builder", 2: "quiz", 3: "cool_off"}
+        # Action Map (Must match Trainer) load from training_config.json
+        self.actions = Dict[int,str] = {}
         self._is_ready = False
         
-        # SECURITY: Load key from env (Default provided for dev, override in prod!)
-        self.secret_key = os.getenv("MODEL_SIGNING_KEY", "my_super_secret_thesis_key_2026").encode()
+        # SECURITY: Load key from env 
+        key = os.getenv("MODEL_SIGNING_KEY")
+        if not key:
+            raise RuntimeError ("CRITICAL: MODEL_SIGNING_KEY not set! Server refuses to start.")
+        self.secret_key = key.encode()
+        
 
     def _verify_signature(self, file_path: Path) -> bool:
         """
         Verifies that the file matches its .sig signature.
         Prevents loading malicious pickles.
+        Reads file in 1MB chucks to prevent RAM spikes.
         """
         sig_path = file_path.with_suffix(file_path.suffix + ".sig")
         if not sig_path.exists():
@@ -53,11 +59,16 @@ class PredictionService:
 
         # 1. Calculate current hash
         try:
+            # 1. initialize HMAC (streaming MOde)
+            h = hmac.new(self.secret_key, digestmod=hashlib.sha256)
+            # 2. Read file in chunks
+            CHUNK_SIZE = 1024 * 1024 # only 1MB
             with open(file_path, "rb") as f:
-                file_data = f.read()
-            calculated_sig = hmac.new(self.secret_key, file_data, hashlib.sha256).hexdigest()
+                while chunk := f.read(CHUNK_SIZE):
+                    h.update(chunk)
+            calculated_sig = h.hexdigest()
 
-            # 2. Read stored hash
+            # 3. Read stored hash
             with open(sig_path, "r") as f:
                 stored_sig = f.read().strip()
 
@@ -98,7 +109,18 @@ class PredictionService:
             with open(prep_path, "rb") as f:
                 self.preprocessor = pickle.load(f)
 
-            # 3. Connect LLM
+            # 3. load config (sync Actions with Trainer)
+            config_path = artifacts_dir / "training_config.json"
+            if config_path.exists():
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                    # covert keys to strings to ints ( json stores keys as strings)
+                    self.actions = {int(k): v for k, v in config.get("actions",{}).items()}
+                logger.info(f"Loaded {len(self.actions)} actions from config.")
+            else:
+                logger.warning("Config not found using fallback actions.")
+                self.actions = {0: "strict_budget", 1: "streak_builder", 2: "quiz", 3: "cool_off"}
+            # connect LLM
             self.advisor = LLMStrategyAdvisor(skip_api_init=False)
             
             self._is_ready = True
@@ -120,20 +142,19 @@ class PredictionService:
             raise RuntimeError("Service not initialized. Models are not loaded.")
 
         try:
-            # 1. Preprocess (Fast - CPU bound)
-            features_dict = request.features.model_dump()
-    
-            df = pd.DataFrame([features_dict])
-            context_vector = self.preprocessor.transform(df)
+            #1. Preprocess (uses helper for cleaner and type-safe)
+            context_df = request.to_dataframe()
+            context_vector = self.preprocessor.transform(context_df)
 
             # 2. Bandit Decision (Fast - CPU bound)
             chosen_arm_idx, debug_info = self.bandit.select_arm(context_vector[0])
-            action_name = self.actions[chosen_arm_idx]
+            action_name = self.actions.get(chosen_arm_idx, "unknown_action")
 
             # 3. LLM Enhancement (Slow - I/O bound)
-            # Call async functions directly (No run_in_threadpool needed)
+            # we use 'features.model_dump() cause the LLM expects a dict
+            features_dict = request.features.model_dump()
             
-            # Fire off both tasks simultaneously
+            # Fire off both tasks simultaneously (True for Parallelism)
             strategy_task = self.advisor.get_strategy_recommendation(features_dict)
             notification_task = self.advisor.generate_message(
                 features_dict, 
@@ -152,12 +173,21 @@ class PredictionService:
                 action=action_name,
                 notification=notification,
                 visual_theme="red" if action_name == "strict_budget" else "blue",
-                debug_info=debug_info[chosen_arm_idx]
+                debug_info=debug_info.get(chosen_arm_idx, {})
             )
 
         except Exception as e:
             logger.error(f" Prediction Error: {e}")
-            raise e
+            # safe Fallback (prevents app crash)
+            return PredictionResponse(
+                user_id=request.user_id,
+                strategy="ERROR",
+                action="cool_off",
+                notification="Let's take a moment to reflect on your goals.",
+                visual_theme="gray",
+                debug_info={"error": str(e)}
+
+            )
 
 # Singleton Pattern
 prediction_service = PredictionService()
