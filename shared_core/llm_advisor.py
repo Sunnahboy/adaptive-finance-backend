@@ -5,7 +5,7 @@ import time
 import random
 import logging
 import asyncio
-import sqlite3
+import aiosqlite
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -25,88 +25,92 @@ except ImportError:
     logger.warning(" 'google-genai' not found. Run: pip install google-genai")
 
 # ============================================================================
-# SQLITE CACHE (Persistent, Crash-Safe)
+# aiosqlite CACHE (Persistent, Crash-Safe)
 # ============================================================================
-class SQLiteCache:
+class AsyncSQLiteCache:
     """
-    A persistent Key-Value store backed by SQLite.
+    Async Cache.
+    Non-blocking I/O allows high concurrency (10k+ req/sec).
     """
     def __init__(self, db_path: str = "llm_cache.db", max_size: int = 1000):
         self.db_path = db_path
         self.max_size = max_size
-        self._init_db()
+        self._init_lock = asyncio.Lock() # prevents race conditions during init
+        
 
-    def _init_db(self):
-        """Creates the table if it doesn't exist."""
-        try:
-            # ensure directory exists
-            Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-            
-            with sqlite3.connect(self.db_path) as conn:
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS cache (
-                        key TEXT PRIMARY KEY,
-                        value TEXT,
-                        last_access TIMESTAMP
-                    )
-                """)
-                # Create an index for fast LRU sorting
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_access ON cache(last_access)")
-                conn.commit()
-            logger.info(f" SQLite Cache connected: {self.db_path}")
-        except Exception as e:
-            logger.error(f" DB Init Failed: {e}")
+    async def init_db(self):
+        """Async Initialization using WAL mode for performance."""
+        async with self._init_lock:
 
-    def get(self, key: str) -> Optional[str]:
-        """Fetch value and update timestamp (LRU logic)."""
+            try:
+                # ensure directory exists
+                Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+                
+                async with aiosqlite.connect(self.db_path) as db:
+                    # WAL Mode = write Ahead Logging 
+                    await db.execute("PRAGMA journal_mode=WAL;")
+                    await db.execute("""
+                        CREATE TABLE IF NOT EXISTS cache (
+                            key TEXT PRIMARY KEY,
+                            value TEXT,
+                            last_access REAL
+                        )
+                    """)
+                    # Create an index for fast LRU sorting
+                    await db.execute("CREATE INDEX IF NOT EXISTS idx_access ON cache(last_access)")
+                    await db.commit()
+                logger.info(f" Async Cache Ready (WAL Mode): {self.db_path}")
+            except Exception as e:
+                logger.error(f" Cache Init Failed: {e}")
+
+    async def get(self, key: str) -> Optional[str]:
+        """Fetch value without blocking the Event Loop."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT value FROM cache WHERE key = ?", (key,))
-                row = cursor.fetchone()
+            async with aiosqlite.connect(self.db_path) as db:
+                async with db.execute("SELECT value FROM cache WHERE key = ?", (key,)) as cursor:
+                    row =  await cursor.fetchone()
                 
                 if row:
-                    # Update 'last_access' to now (Hit)
-                    conn.execute("UPDATE cache SET last_access = ? WHERE key = ?", (time.time(), key))
-                    conn.commit()
+                    # Update LRU timestamp asynchronously fire and forget sty;e
+                    await db.execute("UPDATE cache SET last_access = ? WHERE key = ?", (time.time(), key))
+                    await db.commit()
                     return row[0]
                 return None
         except Exception:
             return None
 
-    def put(self, key: str, value: str):
-        """Insert value and run eviction if needed."""
+    async def put(self, key: str, value: str):
+        """Insert value and manage eviction asynchronously."""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            async with aiosqlite.connect(self.db_path) as db:
                 now = time.time()
                 # 1. Insert or Replace (Upsert)
-                conn.execute(
+                await db.execute(
                     "INSERT OR REPLACE INTO cache (key, value, last_access) VALUES (?, ?, ?)",
                     (key, value, now)
                 )
                 
                 # 2. Check Size (Fast count)
-                cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM cache")
-                row = cursor.fetchone()
-                count = row[0] if row else 0
+                async with db.execute("SELECT COUNT(*) FROM cache") as cursor:
+                    row = cursor.fetchone()
+                    count = row[0] if row else 0
 
                 # 3. Evict Oldest if full
                 if count > self.max_size:
-                    # Delete the row with the smallest (oldest) timestamp
-                    conn.execute("""
+                    # Delete oldest
+                    await db.execute("""
                         DELETE FROM cache WHERE key = (
                             SELECT key FROM cache ORDER BY last_access ASC LIMIT 1
                         )
                     """)
-                conn.commit()
+                await db.commit()
         except Exception as e:
             logger.warning(f" Cache Write Failed: {e}")
 
-    # No explicit save needed for SQLite as it writes instantly to disk
+    
 
 # ============================================================================
-# LLM STRATEGY ADVISOR (With Circuit Breaker & DB)
+# LLM STRATEGY ADVISOR (With Circuit Breaker & Async DB)
 # ============================================================================
 class LLMStrategyAdvisor:
     VOLATILITY_THRESHOLD = 0.8
@@ -126,7 +130,7 @@ class LLMStrategyAdvisor:
         db_path = base_path / "zone_2_artifacts" / "llm_cache.db"
         
         # Initialize SQLite Cache
-        self.cache = SQLiteCache(db_path=str(db_path), max_size=cache_size)
+        self.cache = AsyncSQLiteCache(db_path=str(db_path), max_size=cache_size)
         
         self.enabled = False
         self.client = None
@@ -151,6 +155,13 @@ class LLMStrategyAdvisor:
         except Exception as e:
             logger.error(f" Init Failed: {e}")
             self.enabled = False
+    
+    async def WARMUP(self):
+        """
+            Must be called during startup
+            initializes the async database tables.
+        """
+        await self.cache.init_db()
 
     def _check_circuit_breaker(self) -> bool:
         """Returns True if request allowed, False if Circuit Open (Blocked)."""
@@ -194,7 +205,6 @@ class LLMStrategyAdvisor:
         
         try:
             # 2. Call API (Async)
-            # Using Google GenAI V1 SDK .aio access
             response = await self.client.aio.models.generate_content(
                 model=self.MODEL_ID,
                 contents=prompt,
@@ -218,11 +228,11 @@ class LLMStrategyAdvisor:
 
         except Exception as e:
             self._record_failure(f"Exception: {str(e)}")
-            # Raise to allow Tenacity to retry (unless circuit opens next time)
+            # retry (unless circuit opens next time)
             raise e
 
     # ------------------------------------------------------------------
-    # PUBLIC METHODS
+    # PUBLIC METHODS fully async aware
     # ------------------------------------------------------------------
 
     async def get_strategy_recommendation(self, user_features: Dict) -> str:
@@ -231,8 +241,9 @@ class LLMStrategyAdvisor:
         
         # Cache Key
         cache_key = json.dumps({'t': 'strat', 'v': round(vol, 1), 'r': round(ret, 1)}, sort_keys=True)
-        
-        if cached := self.cache.get(cache_key): return cached
+        #Await the get
+        if cached := await self.cache.get(cache_key): 
+            return cached
 
         # Fallback if Circuit Open or Disabled
         if not self.enabled or (self._cb_is_open and not self._check_circuit_breaker()):
@@ -248,7 +259,9 @@ class LLMStrategyAdvisor:
         try:
             res = await self._call_gemini_async(prompt, max_tokens=10, temp=0.0)
             final = "EXPLORE" if (res and "EXPLORE" in res.upper()) else "EXPLOIT"
-            self.cache.put(cache_key, final)
+
+            # Await the PUT
+            await self.cache.put(cache_key, final)
             return final
         except Exception:
             # Final safety net if all retries fail
@@ -263,7 +276,9 @@ class LLMStrategyAdvisor:
 
         # Cache Key (Includes Vibe for variety)
         cache_key = json.dumps({'t': f'msg_{action_name}', 'v': round(vol, 1), 'mood': current_vibe}, sort_keys=True)
-        if cached := self.cache.get(cache_key): return cached
+        # AWAIT THE GET
+        if cached :=  await self.cache.get(cache_key):
+            return cached
 
         # Fallback Logic (Instant response if LLM is down)
         fallbacks = {
@@ -296,7 +311,8 @@ class LLMStrategyAdvisor:
         try:
             msg = await self._call_gemini_async(prompt, max_tokens=60, temp=0.9)
             if msg:
-                self.cache.put(cache_key, msg)
+                # AWAIT THE PUT
+                await self.cache.put(cache_key, msg)
                 return msg
             return fallbacks.get(action_name, "Check your financial health! 📉")
         except Exception:
