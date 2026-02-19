@@ -1,4 +1,4 @@
--e git+https://github.com/Sunnahboy/adaptive-finance-backend.git@086f2dd14338668c8971b5781dc0e0ccb2db8495#egg=adaptive_finance_ai
+
 aiosqlite==0.22.1
 annotated-doc==0.0.4
 annotated-types==0.7.0
