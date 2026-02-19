@@ -3,10 +3,36 @@ from dataclasses import dataclass
 from typing import Sequence, Optional, List
 import numpy as np
 import pandas as pd
+import logging
+import warnings
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder,  RobustScaler, FunctionTransformer
+from sklearn.preprocessing import OneHotEncoder,  RobustScaler, FunctionTransformer,PolynomialFeatures,KBinsDiscretizer
 from sklearn.compose import ColumnTransformer
+logger = logging.getLogger(__name__)
+
+# Silence the Scikit-Learn 1.9 Future Warning for discretizers
+warnings.filterwarnings(
+    action="ignore", 
+    category=FutureWarning, 
+    module="sklearn.preprocessing._discretization"
+)
+
+# Silence the "Zero-Width Bins" warning (Expected behavior for financial data)
+warnings.filterwarnings(
+    action="ignore", 
+    category=UserWarning, 
+    module="sklearn.preprocessing._discretization"
+)
+
+def safe_log1p(x):
+    """
+    Safely applies log1p to avoid NaNs from negative financial numbers  refunds).
+    """
+    # Converts any negative number to 0.0 before applying the log
+    x = np.nan_to_num(x, nan=0.0)
+    return np.log1p(np.maximum(x, 0.0))
+
 
 @dataclass
 class BanditPreprocessorConfig:
@@ -30,8 +56,11 @@ class BanditPreprocessor:
         num_pipe = Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
             #normalize  distribution
-            ("log_transform",FunctionTransformer(np.log1p,validate=False)),
-            ("scaler", RobustScaler()), 
+            ("log_transform",FunctionTransformer(safe_log1p,validate=False)),
+            #("scaler", RobustScaler()),
+            #Expand the feature space to allow non-linear learning
+            #("poly", PolynomialFeatures(degree=2, include_bias=False))
+            ("binner", KBinsDiscretizer(n_bins=6, encode='onehot-dense', strategy='quantile'))
         ])
 
         # 2. Categorical Pipeline
@@ -83,5 +112,5 @@ class BanditPreprocessor:
             ct = self._pipeline.named_steps["preprocessor"]
             return list(ct.get_feature_names_out())
         except Exception as e:
-            print(f" Warning: Could not retrieve feature names: {e}")
+            logger.warning(f"Could not retrieve features names: {e}")
             return []
