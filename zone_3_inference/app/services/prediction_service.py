@@ -36,7 +36,7 @@ class PredictionService:
         self.advisor: Optional[LLMStrategyAdvisor] = None
         
         # Action Map (Must match Trainer) load from training_config.json
-        self.actions = Dict[int,str] = {}
+        self.actions : Dict[int,str] = {}
         self._is_ready = False
         
         # SECURITY: Load key from env 
