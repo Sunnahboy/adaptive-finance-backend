@@ -6,6 +6,12 @@
     "2": "quiz",
     "3": "cool_off"
   },
+  "action_map": {
+    "strict_budget": 0,
+    "streak_builder": 1,
+    "quiz": 2,
+    "cool_off": 3
+  },
   "reward_config": {
     "volatility_threshold": 0.8,
     "return_threshold": 0.15,
@@ -20,11 +26,11 @@
     "use_teacher_forcing": true
   },
   "metrics": {
-    "accuracy": 0.7240592930444698,
-    "avg_regret": 0.07297605473204105,
+    "accuracy": 0.7867730900798175,
+    "avg_regret": 0.010262257696693273,
     "training_samples": 3504,
     "test_samples": 877,
-    "training_time_seconds": 2.2087996006011963,
-    "timestamp": 1770652018.3339236
+    "training_time_seconds": 3.599247694015503,
+    "timestamp": 1771517921.5882304
   }
 }
