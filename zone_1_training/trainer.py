@@ -70,7 +70,7 @@ REWARD_CONFIG = {
 TRAINING_CONFIG = {
     "alpha": 0.5,                # High exploration for bootstrapping (prevent overconfidence)
     "allow_diagonal": False,     # Full covariance matrix for accuracy
-    "decay_factor": 1.0,         
+    "decay_factor": 1.0,        
     "decay_strategy": "interpolation",
     "use_teacher_forcing": True, # Critical for learning
 }
@@ -113,17 +113,20 @@ def find_best_arm_by_priority(feats: Dict) -> Tuple[Optional[int], float]:
             return arm, 1.0
     return None, 0.0
 
-def pre_calculate_strategy_labels(df: pd.DataFrame) -> Dict[int, str]:
-    """Vectorized Explore/Exploit labeling."""
-    vol_thresh = REWARD_CONFIG["volatility_threshold"]
-    ret_thresh = REWARD_CONFIG["return_threshold"]
 
-    vols = df["spending_volatility"].values
-    rets = df["return_rate"].values
+
+def pre_calculate_strategy_labels(df: pd.DataFrame) -> Dict[int, str]:
+    #Vectorized Epsilon Decay: Starts at 100% Explore, drops to 5%
     indices = df.index.values
+    n_samples = len(df)
+    # Create an array that smoothly drops from 1.0 to 0.05
+    epsilons = np.linspace(1.0, 0.05, n_samples)
+    # Roll the dice against the decaying probability
+    random_rolls = np.random.rand(n_samples)
      # Vectorized check : if user is risky (high vol or high returns) we enforce exploration
-    labels = np.where((vols > vol_thresh) | (rets > ret_thresh), "EXPLORE", "EXPLOIT")
+    labels = np.where(random_rolls < epsilons, "EXPLORE", "EXPLOIT")
     return dict(zip(indices, labels))
+
 
 # ===== MAIN TRAINING LOOP =====
 def train_and_validate() -> None:
@@ -204,6 +207,9 @@ def train_and_validate() -> None:
     
     teacher_force_count = 0
     explore_count = 0
+    optimal_rewards: List[float] = []
+    contexts: List[Dict] = []
+    uncertainties: List[float] = []
 
     for i, ctx_vec in enumerate(train_matrix):
         if i % 500 == 0 and i > 0:
@@ -213,10 +219,11 @@ def train_and_validate() -> None:
         idx = train_indices[i]
 
         strategy = strategy_labels.get(idx, "EXPLOIT")
-
+        #Capture debug_info cleanly right at the start
         if strategy == "EXPLORE":
             chosen_arm = np.random.randint(0, len(ACTIONS))
             explore_count += 1
+            debug_info = {} #no bandit math found during random exploration
         else:
             chosen_arm, _ = bandit.select_arm(ctx_vec)
 
@@ -238,7 +245,20 @@ def train_and_validate() -> None:
                     if best_arm is not None and best_arm != chosen_arm:
                         bandit.update(best_arm, ctx_vec, best_r)
                         teacher_force_count += 1
+        # Track Context
+        contexts.append(feats)
+        
+        # Track Optimal Reward for Regret
+        best_arm, best_r = find_best_arm_by_priority(feats)
+        optimal_rewards.append(best_r if best_r > 0 else 0.0)
+        
+        # Track Uncertainty 
+        chosen_arm, debug_info = bandit.select_arm(ctx_vec)
+        # Safely grab uncertainty if it exists, otherwise log 0
+        unc = debug_info.get(chosen_arm, {}).get('uncertainty', 0.0)
+        uncertainties.append(unc)
 
+        #standard tracking
         history_arms.append(chosen_arm)
         history_rewards.append(reward)
         history_arm_selections[chosen_arm].append(i)
@@ -257,6 +277,9 @@ def train_and_validate() -> None:
                 reward_history=history_rewards,
                 arm_selection_history=history_arm_selections,
                 arm_reward_history=history_arm_rewards,
+                optimal_reward_history=optimal_rewards,       
+                uncertainty_history=uncertainties,            
+                context_history=contexts,                     
                 output_dir=str(artifacts_dir),
             )
             print(f"    Graphs saved")
