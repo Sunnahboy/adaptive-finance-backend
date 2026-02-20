@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI):
         # 2 . Initialize Async database
         # we must wait this cause creating tables is an async I?O operation
         if prediction_service.advisor:
-            await prediction_service.advisor.warmup()
+            await prediction_service.advisor.WARMUP()
             logger.info(" Async DB Warmed up and ready.")
         logger.info("Hybrid AI Brain loaded and ready")
         
