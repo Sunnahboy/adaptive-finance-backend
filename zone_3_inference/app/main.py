@@ -99,7 +99,7 @@ app.add_middleware(
     CORSMiddleware,
     allowed_origins=allowed_origins,
     allow_credentials=True,
-    allow_credentials = ["GET","POST","OPTIONS"],
+   allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["X-API-Token", "Content-Type"], 
 )
 # --- PROBES (Reliability) ---
@@ -140,7 +140,7 @@ async def get_recommendation(request: PredictionRequest):
         logger.error(f" Inference Error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal AI Error")
     
-    
+
 @app.post (
     "/predict/v1/feedback",
     dependencies=[Depends(verify_api_key)],
