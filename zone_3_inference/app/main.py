@@ -97,9 +97,9 @@ if not allowed_origins:
 
 app.add_middleware(
     CORSMiddleware,
-    allowed_origins=allowed_origins,
+    allow_origins=allowed_origins,
     allow_credentials=True,
-   allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["X-API-Token", "Content-Type"], 
 )
 # --- PROBES (Reliability) ---
