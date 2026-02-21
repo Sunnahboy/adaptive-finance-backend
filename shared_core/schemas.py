@@ -2,6 +2,7 @@
 from pydantic import BaseModel, Field, ConfigDict
 import pandas as pd
 
+
 # 1. The Features (Strict Rules) but currency safe
 class UserFeatures(BaseModel):
     """
@@ -62,9 +63,16 @@ class PredictionRequest(BaseModel):
 
 # 3. The Response (What Android receives)
 class PredictionResponse(BaseModel):
+    prediction_id: str = Field(..., description="UUID for this specific prediction. Android MUST keep this for feedback.")
     user_id: str
     strategy: str       # "EXPLORE" or "EXPLOIT"
     action: str         # "strict_budget", "quiz", etc.
     notification: str   # The LLM message
     visual_theme: str   # "red", "blue"
     debug_info: dict    # Confidence scores
+
+# 4 The Feedback ( what android sends back)
+class FeedbackRequest(BaseModel):
+    """The lightweight payload the android app sends back."""
+    prediction_id: str = Field(..., description= "The UUID returned by the predict endpoint")
+    reward: float = Field(..., description= "1.0 if user engaged, 0.0 if dismissed/ignored")
