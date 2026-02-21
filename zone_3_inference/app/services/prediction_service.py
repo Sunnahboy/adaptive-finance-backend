@@ -237,7 +237,7 @@ class PredictionService:
                 pickle.dump(self.bandit, f)
 
             # Rename  ( atomic operation on most os, prevents corruption)
-            temp_path.rename(model_path)
+            temp_path.replace(model_path)
             # clean, internal re-signing
             self._sign_model(model_path)
             logger.info(f"AI Learned! Reward: {request.reward} for arm: {arm_index} (Pred: {request.prediction_id})")

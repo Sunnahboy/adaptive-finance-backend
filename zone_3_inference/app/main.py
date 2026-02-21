@@ -13,6 +13,8 @@ from fastapi import FastAPI, HTTPException, Depends, Security, status,Background
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+# Load Env
+load_dotenv(PROJECT_ROOT / ".env")
 
 # 2. CLEAN IMPORTS 
 try:
@@ -30,9 +32,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger("api.main")
-
-# Load Env
-load_dotenv(PROJECT_ROOT / ".env")
 
 # 3. SECURITY: API Key Validation
 
