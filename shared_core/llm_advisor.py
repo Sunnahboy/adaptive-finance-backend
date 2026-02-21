@@ -92,7 +92,7 @@ class AsyncSQLiteCache:
                 
                 # 2. Check Size (Fast count)
                 async with db.execute("SELECT COUNT(*) FROM cache") as cursor:
-                    row = cursor.fetchone()
+                    row = await cursor.fetchone()
                     count = row[0] if row else 0
 
                 # 3. Evict Oldest if full
