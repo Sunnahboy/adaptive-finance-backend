@@ -267,7 +267,7 @@ class LLMStrategyAdvisor:
             # Final safety net if all retries fail
             return "EXPLOIT"
 
-    async def generate_message(self, user_features: Dict, arm: int, action_name: str) -> str:
+    async def generate_message(self, user_features: Dict, action_name: str) -> str:
         vol = user_features.get('spending_volatility', 0)
         
         # Vibe Check
