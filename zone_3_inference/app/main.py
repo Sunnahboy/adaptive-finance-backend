@@ -9,13 +9,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from fastapi import FastAPI, HTTPException, Depends, Security, status
+from fastapi import FastAPI, HTTPException, Depends, Security, status,BackgroundTasks
 from fastapi.security import APIKeyHeader
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 # 2. CLEAN IMPORTS 
 try:
-    from shared_core.schemas import PredictionRequest, PredictionResponse
+    from shared_core.schemas import PredictionRequest, PredictionResponse, FeedbackRequest
     # Must import via zone_3_inference because we run from root
     from zone_3_inference.app.services.prediction_service import prediction_service
 except ImportError as e:
@@ -86,7 +87,21 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+# parse origin from .env 
+origin_str = os.getenv("ALLOWED_ORIGIN", "")
+allowed_origins = [origin.strip() for origin in origin_str.split(",") if origin.strip()]
 
+if not allowed_origins:
+    logger.warning("No ALLOWED_ORIGINS set. Defaulting to strict local only.")
+    allowed_origins = ["http://localhost:8000"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allowed_origins=allowed_origins,
+    allow_credentials=True,
+    allow_credentials = ["GET","POST","OPTIONS"],
+    allow_headers=["X-API-Token", "Content-Type"], 
+)
 # --- PROBES (Reliability) ---
 @app.get("/health/liveness", tags=["Health"])
 async def liveness_probe():
@@ -124,6 +139,27 @@ async def get_recommendation(request: PredictionRequest):
     except Exception as e:
         logger.error(f" Inference Error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal AI Error")
+    
+    
+@app.post (
+    "/predict/v1/feedback",
+    dependencies=[Depends(verify_api_key)],
+    tags=["Inference"],
+    status_code=status.HTTP_202_ACCEPTED
+)
+
+async def submit_feedback(request: FeedbackRequest, background_tasks: BackgroundTasks ):
+    """
+    Asynchronous Learning Loop.
+    Instantly returns to the Android app, while updating the bandit in the background
+    """
+    #add math and disk operations to back the background queue
+    background_tasks.add_task(prediction_service.process_feedback, request)
+
+    return {
+        "status": "accepted", 
+        "message": f"Feedback for {request.prediction_id} queued for processing"
+    }
 
 if __name__ == "__main__":
     import uvicorn
