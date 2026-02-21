@@ -6,6 +6,10 @@ import hashlib
 import os
 import logging
 import json
+import uuid
+import numpy as np
+
+
 import pandas as pd  
 from pathlib import Path
 from typing import Optional, Dict
@@ -16,7 +20,7 @@ try:
     from shared_core.llm_advisor import LLMStrategyAdvisor
     from shared_core.models import LinUCB
     from shared_core.preprocessing import BanditPreprocessor
-    from shared_core.schemas import PredictionRequest, PredictionResponse
+    from shared_core.schemas import PredictionRequest, PredictionResponse, FeedbackRequest
 except ImportError as e:
     print(f" Package Import Error: {e}. Ensure you ran 'pip install -e .'")
     raise e
@@ -81,6 +85,19 @@ class PredictionService:
         except Exception as e:
             logger.error(f" SECURITY ERROR during verification: {e}")
             return False
+        
+
+    def _sign_model(self, file_path: Path)->None:
+        """Automatically sign the model files , keeping the services self contained"""
+        sig_path = file_path.with_suffix(file_path.suffix + ".sig")
+        h = hmac.new(self.secret_key, digestmod= hashlib.sha256)
+
+        with open(file_path, "rb") as f:
+            while chunk := f.read(1024 * 1024):
+                h.update(chunk)
+        with open(sig_path, "w") as f:
+            f.write(h.hexdigest())
+
 
     def load_resources(self) -> bool:
         """
@@ -140,6 +157,8 @@ class PredictionService:
         """
         if not self._is_ready:
             raise RuntimeError("Service not initialized. Models are not loaded.")
+        
+        pred_id = str(uuid.uuid4())
 
         try:
             #1. Preprocess (uses helper for cleaner and type-safe)
@@ -148,26 +167,29 @@ class PredictionService:
 
             # 2. Bandit Decision (Fast - CPU bound)
             chosen_arm_idx, debug_info = self.bandit.select_arm(context_vector[0])
-            action_name = self.actions.get(chosen_arm_idx, "unknown_action")
+            native_arm_idx = int(chosen_arm_idx)
+            action_name = self.actions.get(native_arm_idx, "unknown_action")
 
-            # 3. LLM Enhancement (Slow - I/O bound)
-            # we use 'features.model_dump() cause the LLM expects a dict
+            # 3. LLM Enhancement (parallel execution safely awaited)
             features_dict = request.features.model_dump()
             
-            # Fire off both tasks simultaneously (True for Parallelism)
-            strategy_task = self.advisor.get_strategy_recommendation(features_dict)
-            notification_task = self.advisor.generate_message(
-                features_dict, 
-                chosen_arm_idx, 
-                action_name
+            strategy, notification = await asyncio.gather(
+                self.advisor.get_strategy_recommendation(features_dict),
+                self.advisor.generate_message(features_dict, action_name)
             )
 
-            # Wait for BOTH to finish (latency is max(T1, T2))
-            # The event loop handles the concurrency efficiently
-            strategy, notification = await asyncio.gather(strategy_task, notification_task)
+            #4. save context state for feedback loop
+            cache_payload = json.dumps({
+                "arm_index": native_arm_idx,
+                "context": context_vector[0].tolist()
+            })
+            await self.advisor.cache.put(f"pred_{pred_id}", cache_payload)
+
+            
 
             # Return Pydantic Response
             return PredictionResponse(
+                prediction_id=pred_id,
                 user_id=request.user_id,
                 strategy=strategy,
                 action=action_name,
@@ -180,6 +202,7 @@ class PredictionService:
             logger.error(f" Prediction Error: {e}")
             # safe Fallback (prevents app crash)
             return PredictionResponse(
+                prediction_id=pred_id,
                 user_id=request.user_id,
                 strategy="ERROR",
                 action="cool_off",
@@ -188,6 +211,38 @@ class PredictionService:
                 debug_info={"error": str(e)}
 
             )
+    async def process_feedback(self, request: FeedbackRequest) -> None:
+        """Background task: Fetches cached context, updates Bandit, saves securely to disk"""
+        try:
+            # 1. Fetch exact state from cache
+            cache_key = f"pred_{request.prediction_id}"
+            cached_data_str = await self.advisor.cache.get(cache_key)
+
+            if not cached_data_str:
+                logger.warning(f"Feedback dropped: prediction_id {request.prediction_id} expired or invalid.")
+                return
+            #2 Reconstruct math
+            cached_data = json.loads(cached_data_str)
+            arm_index = cached_data["arm_index"]
+            context_vector = np.array(cached_data["context"])
+            # 3 update the bandit brain
+            self.bandit.update(arm_index,context_vector, request.reward)
+            #4 Crash safe save and re sign internally
+            base_path = Path(__file__).resolve().parent.parent.parent.parent
+            model_path = base_path / "zone_2_artifacts" / "bandit_model.pkl"
+            temp_path = model_path.with_suffix('.pkl.tmp')
+
+            #  write to temporary file first
+            with open (temp_path, "wb") as f:
+                pickle.dump(self.bandit, f)
+
+            # Rename  ( atomic operation on most os, prevents corruption)
+            temp_path.rename(model_path)
+            # clean, internal re-signing
+            self._sign_model(model_path)
+            logger.info(f"AI Learned! Reward: {request.reward} for arm: {arm_index} (Pred: {request.prediction_id})")
+        except Exception as e:
+            logger.error(f"Failed to process background feedback: {e}", exc_info=True)
 
 # Singleton Pattern
 prediction_service = PredictionService()
