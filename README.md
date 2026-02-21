@@ -1,4 +1,6 @@
-Markdown
+Here is the complete, finalized `README.md` with all the advanced technical details included. You can copy the entire block below and paste it directly into your file.
+
+```markdown
 # 🧠 Adaptive Finance AI (Hybrid Bandit + LLM)
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
@@ -38,7 +40,7 @@ adaptive_finance_ai/
 │   └── sign_models.py           # Cryptographically signs trained models (.pkl) with HMAC
 ├── shared_core/                 # Shared resources between Training and Inference
 │   ├── features.py              # Centralized feature engineering and definitions
-│   ├── llm_advisor.py           # Async Google Gemini integration, Circuit Breaker & SQLite Cache
+│   ├── llm_advisor.py           # Async Google Gemini integration, Circuit Breaker & aiosqlite Cache
 │   ├── models.py                # Custom LinUCB Contextual Bandit implementation
 │   ├── preprocessing.py         # KBinsDiscretizer & Log1p math pipelines
 │   └── schemas.py               # Strict Pydantic contracts for API validation
@@ -63,14 +65,21 @@ adaptive_finance_ai/
 ├── .env                         # Environment variables (Ignored in Git)
 ├── .gitignore                   # Prevents secret keys and SQLite databases from leaking
 └── requirements.txt             # Python dependencies (aiosqlite, fastapi, google-genai, etc.)
-🛠️ Getting Started
-Prerequisites
-Python 3.10+
 
-Google AI Studio API Key (for Gemini)
+```
 
-1. Installation
-Bash
+---
+
+## 🛠️ Getting Started
+
+### Prerequisites
+
+* Python 3.10+
+* Google AI Studio API Key (for Gemini)
+
+### 1. Installation
+
+```bash
 # Clone the repository
 git clone [https://github.com/YOUR_USERNAME/adaptive-finance-backend.git](https://github.com/YOUR_USERNAME/adaptive-finance-backend.git)
 cd adaptive-finance-backend
@@ -82,10 +91,14 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # Install Dependencies
 pip install -r requirements.txt
 pip install -e .           # Install local packages for shared_core routing
-2. Configuration (.env)
-Create a .env file in the root directory:
 
-Ini, TOML
+```
+
+### 2. Configuration (`.env`)
+
+Create a `.env` file in the root directory:
+
+```ini
 # --- AI Configuration ---
 GEMINI_API_KEY=your_google_gemini_key_here
 
@@ -99,22 +112,33 @@ MODEL_SIGNING_KEY=my_super_secret_thesis_key_2026
 # --- CORS Rules ---
 # Comma separated list. 10.0.2.2 is required for Android Emulator testing.
 ALLOWED_ORIGINS=http://localhost:8000,[http://10.0.2.2:8000](http://10.0.2.2:8000)
-3. Run Locally
-Bash
+
+```
+
+### 3. Run Locally
+
+```bash
 python zone_3_inference/app/main.py
-Visit http://127.0.0.1:8000/docs to access the Swagger UI and test the endpoints.
 
-📡 API Usage (The Stateless Loop)
-The system operates on a two-step reinforcement learning loop.
+```
 
-Step 1: Request Prediction
-Endpoint: POST /predict/v1/context
+Visit `http://127.0.0.1:8000/docs` to access the Swagger UI and test the endpoints.
 
-Headers: Content-Type: application/json | X-API-Token: <YOUR_ACCESS_TOKEN>
+---
 
-Request:
+## 📡 API Usage (The Stateless Loop)
 
-JSON
+The system operates on a two-step reinforcement learning loop using background tasks and an async SQLite cache.
+
+### Step 1: Request Prediction
+
+**Endpoint:** `POST /predict/v1/context`
+
+**Headers:** `Content-Type: application/json` | `X-API-Token: <YOUR_ACCESS_TOKEN>`
+
+**Request:**
+
+```json
 {
   "user_id": "user_123",
   "features": {
@@ -125,9 +149,12 @@ JSON
     "avg_transaction_value": 20.0
   }
 }
-Response:
 
-JSON
+```
+
+**Response:**
+
+```json
 {
   "prediction_id": "e0c9ed02-d764-40e9-b85f-43bb354e104b",
   "user_id": "user_123",
@@ -137,35 +164,57 @@ JSON
   "visual_theme": "red",
   "debug_info": {}
 }
-Step 2: Submit Feedback (Learning)
-The Android app must send back the prediction_id so the AI can learn from the interaction.
 
-Endpoint: POST /predict/v1/feedback
+```
 
-Headers: Content-Type: application/json | X-API-Token: <YOUR_ACCESS_TOKEN>
+### Step 2: Submit Feedback (Learning)
 
-Request:
+*The Android app must send back the `prediction_id` so the AI can learn from the interaction.*
 
-JSON
+**Endpoint:** `POST /predict/v1/feedback`
+
+**Headers:** `Content-Type: application/json` | `X-API-Token: <YOUR_ACCESS_TOKEN>`
+
+**Request:**
+
+```json
 {
   "prediction_id": "e0c9ed02-d764-40e9-b85f-43bb354e104b",
   "reward": 1.0 
 }
-(Reward is 1.0 if the user clicked/engaged, 0.0 if they ignored the notification).
 
-Response: Returns a 202 Accepted status immediately, while the Bandit matrix updates and re-signs its .pkl file in a background worker thread.
+```
 
-🧪 Testing & Training
-Retraining the Brain from Scratch:
+*(Reward is `1.0` if the user clicked/engaged, `0.0` if they ignored the notification).*
+
+**Response:** Returns a `202 Accepted` status immediately, while the Bandit matrix updates and atomically re-signs its `.pkl` file in a background worker thread.
+
+---
+
+## 🧪 Testing & Training
+
+**Retraining the Brain from Scratch:**
 To rebuild the Data Science environment, test Epsilon Decay, and generate the 9-panel dashboard:
 
-Bash
+```bash
 python zone_1_training/trainer.py
-Manual Security Verification:
+
+```
+
+**Manual Security Verification:**
 To verify the cryptographic integrity of the models without booting the server:
 
-Bash
+```bash
 python scripts/sign_models.py
-📜 License: Distributed under the MIT License.
 
-🎓 Developed for: BSc Computer Science Final Year Project (2026).
+```
+
+---
+
+📜 **License:** Distributed under the MIT License.
+
+🎓 **Developed for:** BSc Computer Science Final Year Project (2026).
+
+```
+
+```
