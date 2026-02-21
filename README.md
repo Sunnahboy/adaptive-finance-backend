@@ -1,6 +1,6 @@
-Here is the complete, finalized `README.md` with all the advanced technical details included. You can copy the entire block below and paste it directly into your file.
 
-```markdown
+
+
 # 🧠 Adaptive Finance AI (Hybrid Bandit + LLM)
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
@@ -215,6 +215,3 @@ python scripts/sign_models.py
 
 🎓 **Developed for:** BSc Computer Science Final Year Project (2026).
 
-```
-
-```
