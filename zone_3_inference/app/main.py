@@ -9,8 +9,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from fastapi import FastAPI, HTTPException, Depends, Security, status,BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, Security, status,BackgroundTasks,Request
 from fastapi.security import APIKeyHeader
+from fastapi.templating import Jinja2Templates
+import aiosqlite
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 # Load Env
@@ -86,6 +88,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+# Setup Templates Directory
+BASE_DIR = Path(__file__).resolve().parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
 # parse origin from .env 
 origin_str = os.getenv("ALLOWED_ORIGIN", "")
 allowed_origins = [origin.strip() for origin in origin_str.split(",") if origin.strip()]
@@ -160,6 +166,47 @@ async def submit_feedback(request: FeedbackRequest, background_tasks: Background
         "message": f"Feedback for {request.prediction_id} queued for processing"
     }
 
+
+
+@app.get("/admin/dashboard",tags=["Monitoring"])
+async def get_dashboard(request:Request):
+    """Generate a live HTML dashboard using Jinja2 Templates"""
+    db_path = prediction_service.advisor.cache.db_path
+
+    labels, counts, success_rates = ["No Data"],[1],[0]
+    error_msg = None
+
+    try:
+        async with aiosqlite.connect(db_path) as db:
+            # Action distribution
+            cursor = await db.execute("SELECT action_name, COUNT(*) FROM analytics_log GROUP BY action_name")
+            distribution = await cursor.fetchall()
+
+            # Success rate (CTR)
+
+            cursor = await db.execute("SELECT action_name, AVG(reward) FROM analytics_log GROUP BY action_name")
+            ctr = await cursor.fetchall()
+
+        if distribution and ctr:
+            labels = [row[0] for row in distribution]
+            counts = [row[1] for row in distribution]
+            success_rates = [round(row[1] * 100, 1) if row[1] is not None else 0 for row in ctr]
+    except Exception as e:
+        logger.error(f"Dashboard Database Error: {e}")
+        error_msg = f"Could not load analytic: {str(e)}"
+
+    # pass data securely to the hml file
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,  #FastAPI strictly requires the request object here
+            "labels": labels,
+            "counts": counts,
+            "success_rates": success_rates,
+            "error_msg": error_msg
+
+        }
+    )
 if __name__ == "__main__":
     import uvicorn
     # Listen on all interfaces (0.0.0.0) so Docker/Android can see it

@@ -49,6 +49,8 @@ class AsyncSQLiteCache:
                 async with aiosqlite.connect(self.db_path) as db:
                     # WAL Mode = write Ahead Logging 
                     await db.execute("PRAGMA journal_mode=WAL;")
+
+                    #1 The Ephemeral Cache table
                     await db.execute("""
                         CREATE TABLE IF NOT EXISTS cache (
                             key TEXT PRIMARY KEY,
@@ -58,6 +60,17 @@ class AsyncSQLiteCache:
                     """)
                     # Create an index for fast LRU sorting
                     await db.execute("CREATE INDEX IF NOT EXISTS idx_access ON cache(last_access)")
+
+                    # 2 permanent analytics table
+                    await db.execute("""
+                        CREATE TABLE IF NOT EXISTS analytics_log (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            prediction_id TEXT,
+                            action_name TEXT,
+                            reward REAL,
+                            timestamp REAL
+                        )
+                    """)
                     await db.commit()
                 logger.info(f" Async Cache Ready (WAL Mode): {self.db_path}")
             except Exception as e:

@@ -15,6 +15,10 @@ from pathlib import Path
 from typing import Optional, Dict
 from fastapi.concurrency import run_in_threadpool
 
+#for dashboard logging
+import time
+import aiosqlite
+
 # CLEAN IMPORTS (Assumes 'pip install -e .' was run)
 try:
     from shared_core.llm_advisor import LLMStrategyAdvisor
@@ -240,6 +244,16 @@ class PredictionService:
             temp_path.replace(model_path)
             # clean, internal re-signing
             self._sign_model(model_path)
+
+            # Log the interaction permanently for the dashboard
+            action_name = self.actions.get(arm_index, "unknown")
+            async with aiosqlite.connect(self.advisor.cache.db_path) as db:
+                await db.execute(
+                    "INSERT INTO analytics_log (prediction_id, action_name, reward, timestamp) VALUES (?, ?, ?, ?)",
+                    (request.prediction_id, action_name, request.reward, time.time())
+                )
+                await db.commit()
+
             logger.info(f"AI Learned! Reward: {request.reward} for arm: {arm_index} (Pred: {request.prediction_id})")
         except Exception as e:
             logger.error(f"Failed to process background feedback: {e}", exc_info=True)
