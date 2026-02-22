@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Adaptive Finance AI - Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f7f6; padding: 20px; }
+        .container { display: flex; gap: 20px; max-width: 1000px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 50%; }
+        h1 { text-align: center; color: #333; }
+        .error { color: red; text-align: center; }
+    </style>
+</head>
+<body>
+    <h1>🧠 AI Performance Dashboard</h1>
+    
+    {% if error_msg %}
+        <p class="error"><strong>System Notice:</strong> {{ error_msg }}</p>
+    {% endif %}
+
+    <div class="container">
+        <div class="card">
+            <h3>Action Distribution</h3>
+            <canvas id="distChart"></canvas>
+        </div>
+        <div class="card">
+            <h3>Success Rate (CTR %)</h3>
+            <canvas id="ctrChart"></canvas>
+        </div>
+    </div>
+
+    <script id="chart-data" type="application/json">
+        {
+            "labels": {{ labels | tojson }},
+            "counts": {{ counts | tojson }},
+            "successRates": {{ success_rates | tojson }}
+        }
+    </script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            
+            // 1. Read the data securely from the hidden island
+            const rawData = document.getElementById('chart-data').textContent;
+            const chartData = JSON.parse(rawData);
+
+            // 2. Render Pie Chart
+            new Chart(document.getElementById('distChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{ 
+                        data: chartData.counts, 
+                        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'] 
+                    }]
+                }
+            });
+
+            // 3. Render Bar Chart
+            new Chart(document.getElementById('ctrChart'), {
+                type: 'bar',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{ 
+                        label: 'Click Rate (%)', 
+                        data: chartData.successRates, 
+                        backgroundColor: '#36A2EB' 
+                    }]
+                },
+                options: { 
+                    scales: { y: { beginAtZero: true, max: 100 } } 
+                }
+            });
+        });
+    </script>
+</body>
+</html>
