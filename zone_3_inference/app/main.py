@@ -2,6 +2,7 @@ import sys
 import logging
 import os  
 from pathlib import Path
+from collections import defaultdict
 from contextlib import asynccontextmanager
 
 # 1. SETUP PATH 
@@ -64,7 +65,10 @@ async def lifespan(app: FastAPI):
     includes Async Database Warmup!
     """
     logger.info(" Server starting up...")
-    
+
+    #Grab the smartest brain from the cloud before we load anything!
+    prediction_service.download_latest_brain()
+
     #1. Load sync Artifacts (Pickle files)
     # We do this first so that the advisor object exists
     success = prediction_service.load_resources()
@@ -168,45 +172,55 @@ async def submit_feedback(request: FeedbackRequest, background_tasks: Background
 
 
 
-@app.get("/admin/dashboard",tags=["Monitoring"])
-async def get_dashboard(request:Request):
-    """Generate a live HTML dashboard using Jinja2 Templates"""
-    db_path = prediction_service.advisor.cache.db_path
-
-    labels, counts, success_rates = ["No Data"],[1],[0]
+@app.get("/admin/dashboard", tags=["Monitoring"])
+async def get_dashboard(request: Request):
+    """Generate a live HTML dashboard pulling from Supabase Cloud."""
+    labels, counts, success_rates = ["No Data"], [1], [0]
     error_msg = None
 
     try:
-        async with aiosqlite.connect(db_path) as db:
-            # Action distribution
-            cursor = await db.execute("SELECT action_name, COUNT(*) FROM analytics_log GROUP BY action_name")
-            distribution = await cursor.fetchall()
+        #1. Fetch data from Supabase instead of SQLite
+        if prediction_service.supabase:
+            response = prediction_service.supabase.table("analytics_log").select("action_name, reward").execute()
+            data = response.data
+            
+            if data:
+                # 2. Calculate Distribution and CTR in Python
+                action_counts = defaultdict(int)
+                action_rewards = defaultdict(list)
+                
+                for row in data:
+                    action = row["action_name"]
+                    action_counts[action] += 1
+                    action_rewards[action].append(row["reward"])
+                    
+                labels = list(action_counts.keys())
+                counts = [action_counts[label] for label in labels]
+                # Calculate average reward (CTR) percentage per action
+                success_rates = [
+                    round((sum(action_rewards[label]) / len(action_rewards[label])) * 100, 1) 
+                    for label in labels
+                ]
+        else:
+            error_msg = "Supabase connection not initialized. Check .env keys."
 
-            # Success rate (CTR)
-
-            cursor = await db.execute("SELECT action_name, AVG(reward) FROM analytics_log GROUP BY action_name")
-            ctr = await cursor.fetchall()
-
-        if distribution and ctr:
-            labels = [row[0] for row in distribution]
-            counts = [row[1] for row in distribution]
-            success_rates = [round(row[1] * 100, 1) if row[1] is not None else 0 for row in ctr]
     except Exception as e:
         logger.error(f"Dashboard Database Error: {e}")
-        error_msg = f"Could not load analytic: {str(e)}"
+        error_msg = f"Could not load analytics from cloud: {str(e)}"
 
-    # pass data securely to the hml file
+    # Pass data securely to the HTML file
     return templates.TemplateResponse(
         "dashboard.html",
         {
-            "request": request,  #FastAPI strictly requires the request object here
+            "request": request,
             "labels": labels,
             "counts": counts,
             "success_rates": success_rates,
             "error_msg": error_msg
-
         }
     )
+
+
 if __name__ == "__main__":
     import uvicorn
     # Listen on all interfaces (0.0.0.0) so Docker/Android can see it

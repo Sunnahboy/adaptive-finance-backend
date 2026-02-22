@@ -8,6 +8,7 @@ import logging
 import json
 import uuid
 import numpy as np
+from supabase import create_client,Client
 
 
 import pandas as pd  
@@ -52,7 +53,52 @@ class PredictionService:
         if not key:
             raise RuntimeError ("CRITICAL: MODEL_SIGNING_KEY not set! Server refuses to start.")
         self.secret_key = key.encode()
+
+        # SUPABASE INIT (Cloud Memory)
+        url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
+
+        if url and supabase_key:
+            self.supabase: Client = create_client(url, supabase_key)
+        else:
+            self.supabase = None
+            logger.warning("Supabase keys missing. Learning without cloud persistence.")
+
+       #micro-batch setup
+        self._click_counter = 0
+        self.BATCH_SIZE = 5 # 5 for faster local testing increase later in production
+    
+
+
+    def download_latest_brain(self):
+        """Downloads the latest .pkl and sign from supabase on startup"""
+        if not self.supabase:
+            logger.warning("Supabase not configured skipping cloud model download")
+            return False
         
+        base_path = Path(__file__).resolve().parent.parent.parent.parent
+        model_path = base_path / "zone_2_artifacts" / "bandit_model.pkl"
+        sig_path = model_path.with_suffix('.pkl.sig')
+
+        try:
+            logger.info(" Downloading latest AI brain from Supabase...")
+            #Download Model
+            model_bytes = self.supabase.storage.from_("ai-models").download("bandit_model.pkl")
+            with open(model_path, "wb") as f:
+                f.write(model_bytes)
+                
+            # Download Signature
+            sig_bytes = self.supabase.storage.from_("ai-models").download("bandit_model.pkl.sig")
+            with open(sig_path, "wb") as f:
+                f.write(sig_bytes)
+                
+            logger.info(" Successfully loaded cloud brain.")
+            return True
+        except Exception as e:
+            logger.warning(f"Cloud download failed (Using local GitHub baseline): {e}")
+            return False
+
+
 
     def _verify_signature(self, file_path: Path) -> bool:
         """
@@ -226,11 +272,14 @@ class PredictionService:
                 logger.warning(f"Feedback dropped: prediction_id {request.prediction_id} expired or invalid.")
                 return
             #2 Reconstruct math
+
             cached_data = json.loads(cached_data_str)
             arm_index = cached_data["arm_index"]
             context_vector = np.array(cached_data["context"])
+
             # 3 update the bandit brain
             self.bandit.update(arm_index,context_vector, request.reward)
+
             #4 Crash safe save and re sign internally
             base_path = Path(__file__).resolve().parent.parent.parent.parent
             model_path = base_path / "zone_2_artifacts" / "bandit_model.pkl"
@@ -245,15 +294,49 @@ class PredictionService:
             # clean, internal re-signing
             self._sign_model(model_path)
 
-            # Log the interaction permanently for the dashboard
-            action_name = self.actions.get(arm_index, "unknown")
-            async with aiosqlite.connect(self.advisor.cache.db_path) as db:
-                await db.execute(
-                    "INSERT INTO analytics_log (prediction_id, action_name, reward, timestamp) VALUES (?, ?, ?, ?)",
-                    (request.prediction_id, action_name, request.reward, time.time())
-                )
-                await db.commit()
+            
+            #5. Log to Supabase PostgreSQL (Permanent Analytics)
+           
+            action_name = self.actions.get(arm_index, "unknown")  # Define action_name first by mapping the arm_index
+            if self.supabase:
+                try:
+                    self.supabase.table("analytics_log").insert({
+                        "prediction_id": request.prediction_id,
+                        "action_name": action_name,
+                        "reward": request.reward
+                    }).execute()
+                except Exception as db_err:
+                    logger.error(f"Supabase Analytics Error: {db_err}")
 
+            # 6.Micro-Batching to Supabase Object Storage
+            self._click_counter += 1
+            if self._click_counter >= self.BATCH_SIZE:
+                if self.supabase:
+                    try:
+                        logger.info(f" Batch limit reached ({self.BATCH_SIZE}). Uploading model to Supabase...")
+                        
+                        # Upload the Model (.pkl)
+                        with open(model_path, 'rb') as f:
+                            self.supabase.storage.from_("ai-models").upload(
+                                file=f, 
+                                path="bandit_model.pkl", 
+                                file_options={"upsert": "true"}
+                            )
+                            
+                        # Upload the Signature (.pkl.sig)
+                        sig_path = model_path.with_suffix('.pkl.sig')
+                        with open(sig_path, 'rb') as f:
+                            self.supabase.storage.from_("ai-models").upload(
+                                file=f, 
+                                path="bandit_model.pkl.sig", 
+                                file_options={"upsert": "true"}
+                            )
+                        logger.info(" Cloud persistence successful.")
+                    except Exception as upload_err:
+                        logger.error(f"Supabase Storage Error: {upload_err}")
+                
+                # Reset counter regardless of success to prevent spamming
+                self._click_counter = 0
             logger.info(f"AI Learned! Reward: {request.reward} for arm: {arm_index} (Pred: {request.prediction_id})")
         except Exception as e:
             logger.error(f"Failed to process background feedback: {e}", exc_info=True)
