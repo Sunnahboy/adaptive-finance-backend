@@ -27,6 +27,7 @@ This backend serves as the stateless "Brain" for the Adaptive Finance Android Ap
     * **Model Integrity:** All AI models (`.pkl`) are digitally signed with HMAC-SHA256. The system performs an atomic file replacement (`os.replace`) and re-signs the model dynamically upon learning.
     * **API Security:** Endpoints are protected via a custom `X-API-Token` header and strict `.env` driven CORS policies.
 * **💬 Generative Persona:** Uses Google Gemini 2.5 to generate dynamic content. Implements a custom Async Circuit Breaker to instantly fallback to hardcoded strings if the LLM API spikes in latency.
+* **📈 Live MLOps Dashboard:** A built-in, lightweight HTML/JS dashboard powered by FastAPI and Chart.js. It visualizes real-time Contextual Bandit metrics including Action Distribution and Click-Through Rate (CTR) via a persistent SQLite analytics log.
 
 ---
 
@@ -60,6 +61,8 @@ adaptive_finance_ai/
 ├── zone_3_inference/            # Production Web Backend
 │   └── app/
 │       ├── main.py              # FastAPI Gateway (CORS, Background Tasks, Endpoints)
+├       |── templates/           # Jinja2 HTML templates for the Web Dashboard
+        | └── dashboard.html     # Chart.js UI for real-time model monitoring
 │       └── services/
 │           └── prediction_service.py # Core logic bridging the Bandit, LLM, and UUID Cache
 ├── .env                         # Environment variables (Ignored in Git)
@@ -123,6 +126,7 @@ python zone_3_inference/app/main.py
 ```
 
 Visit `http://127.0.0.1:8000/docs` to access the Swagger UI and test the endpoints.
+`https://adaptive-finance-backend.onrender.com/docs` or use this
 
 ---
 
@@ -210,6 +214,19 @@ python scripts/sign_models.py
 ```
 
 ---
+3. Add a new 📊 Monitoring section (Put this right above the License section at the bottom):
+## 📊 Live Monitoring Dashboard
+
+The system includes a zero-configuration MLOps dashboard to monitor the AI's real-time performance without heavy external dependencies (like Prometheus or Grafana).
+
+**To access the dashboard:**
+1. Run the server locally or deploy to the cloud.
+2. Navigate to: `https://adaptive-finance-backend.onrender.com/admin/dashboard`.
+
+**Tracked Metrics:**
+* **Action Distribution:** A pie chart showing the percentage of traffic allocated to each gamification strategy (Strict Budget, Cool Off, etc.).
+* **Success Rate (CTR):** A bar chart tracking the real-world reward conversion rate of each arm, proving the Bandit is identifying the optimal strategy.
+
 
 📜 **License:** Distributed under the MIT License.
 
