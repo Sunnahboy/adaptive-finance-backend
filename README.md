@@ -1,5 +1,5 @@
 
-```markdown
+
 # 🧠 Adaptive Finance AI (Hybrid Bandit + LLM)
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
