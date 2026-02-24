@@ -29,6 +29,19 @@ This backend serves as the stateless "Brain" for the Adaptive Finance Android Ap
 * **💬 Generative Persona:** Uses Google Gemini 2.5 to generate dynamic content. Implements a custom Async Circuit Breaker to instantly fallback to hardcoded strings if the LLM API spikes in latency.
 * **📈 Live MLOps Dashboard:** A built-in, lightweight HTML/JS dashboard powered by FastAPI and Chart.js. It visualizes real-time Contextual Bandit metrics including Action Distribution and Click-Through Rate (CTR) via a persistent SQLite analytics log.
 
+* **Resilient Enterprise ML Pipeline:** Engineered a custom micro-batching learning loop that asynchronously updates and synchronizes the Contextual Bandit model (`.pkl`) with Supabase Cloud Storage after a configurable threshold of user interactions.
+* **Stateless Cloud Architecture:** Designed the AI memory to survive cloud server cold-starts and horizontal scaling by fetching the latest validated model state from the cloud upon server initialization.
+* **Secure Artifact Management:** Implemented strict backend Row-Level Security (RLS) bypass mechanisms using protected service role keys, ensuring public clients cannot tamper with or overwrite the core AI model.
+
+
+### 🧠 System Architecture & Data Flow
+
+
+The backend operates on a highly available, cloud-native architecture designed for real-time reinforcement learning:
+1. **Micro-Batched Learning:** To minimize network overhead, user feedback is cached locally via SQLite and processed asynchronously. The system batches $N$ interactions before triggering a high-priority cloud upload.
+2. **Supabase Cloud Persistence:** The system utilizes Supabase PostgreSQL for persistent analytics logging and Supabase Object Storage for model artifacts.
+3. **Zero-Trust Security:** API endpoints are protected via custom API key middleware, while cloud database interactions are securely routed through backend `service_role` configurations to maintain strict Row-Level Security (RLS).
+
 ---
 
 ## 🏗️ File Structure
