@@ -1,6 +1,5 @@
 
-
-
+```markdown
 # 🧠 Adaptive Finance AI (Hybrid Bandit + LLM)
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
@@ -18,33 +17,33 @@ This backend serves as the stateless "Brain" for the Adaptive Finance Android Ap
 
 ---
 
-## 🚀 Key Features
+## 🚀 Key Enterprise Features
 
 * **⚡ Non-Blocking I/O (Async/Await):** Fully asynchronous architecture using FastAPI. LLM generation and Bandit math run in parallel (`asyncio.gather`), ensuring sub-second inference.
-* **🎯 Online Contextual Learning:** Implements `LinUCB` with Sherman-Morrison updates for O(d²) online learning efficiency. Features a FastAPI `BackgroundTasks` queue so the Bandit can update its matrix without lagging the mobile UI.
+* **🎯 Online Contextual Learning:** Implements `LinUCB` with Sherman-Morrison updates for $O(d^2)$ online learning efficiency. Features a FastAPI `BackgroundTasks` queue so the Bandit can update its matrix without lagging the mobile UI.
 * **💾 Stateless Caching Architecture:** Uses an asynchronous, WAL-mode SQLite cache (`aiosqlite`) to securely store prediction states. This prevents "Ghost Coroutines" and keeps the Android client lightweight.
 * **🛡️ Cryptographic Security:**
     * **Model Integrity:** All AI models (`.pkl`) are digitally signed with HMAC-SHA256. The system performs an atomic file replacement (`os.replace`) and re-signs the model dynamically upon learning.
     * **API Security:** Endpoints are protected via a custom `X-API-Token` header and strict `.env` driven CORS policies.
 * **💬 Generative Persona:** Uses Google Gemini 2.5 to generate dynamic content. Implements a custom Async Circuit Breaker to instantly fallback to hardcoded strings if the LLM API spikes in latency.
-* **📈 Live MLOps Dashboard:** A built-in, lightweight HTML/JS dashboard powered by FastAPI and Chart.js. It visualizes real-time Contextual Bandit metrics including Action Distribution and Click-Through Rate (CTR) via a persistent SQLite analytics log.
-
-* **Resilient Enterprise ML Pipeline:** Engineered a custom micro-batching learning loop that asynchronously updates and synchronizes the Contextual Bandit model (`.pkl`) with Supabase Cloud Storage after a configurable threshold of user interactions.
+* **Resilient MLOps Pipeline:** Engineered a custom micro-batching loop that asynchronously updates and synchronizes the Contextual Bandit model with Supabase Cloud Storage after a configurable threshold of user interactions.
 * **Stateless Cloud Architecture:** Designed the AI memory to survive cloud server cold-starts and horizontal scaling by fetching the latest validated model state from the cloud upon server initialization.
-* **Secure Artifact Management:** Implemented strict backend Row-Level Security (RLS) bypass mechanisms using protected service role keys, ensuring public clients cannot tamper with or overwrite the core AI model.
-
-
-### 🧠 System Architecture & Data Flow
-
-
-The backend operates on a highly available, cloud-native architecture designed for real-time reinforcement learning:
-1. **Micro-Batched Learning:** To minimize network overhead, user feedback is cached locally via SQLite and processed asynchronously. The system batches $N$ interactions before triggering a high-priority cloud upload.
-2. **Supabase Cloud Persistence:** The system utilizes Supabase PostgreSQL for persistent analytics logging and Supabase Object Storage for model artifacts.
-3. **Zero-Trust Security:** API endpoints are protected via custom API key middleware, while cloud database interactions are securely routed through backend `service_role` configurations to maintain strict Row-Level Security (RLS).
+* **Secure Artifact Management:** Implemented strict backend Row-Level Security (RLS) bypass mechanisms using protected `service_role` keys, ensuring public clients cannot tamper with the core AI model.
 
 ---
 
-## 🏗️ File Structure
+## 🏗️ System Architecture & Data Flow
+
+The backend operates on a highly available, cloud-native architecture deployed on a dedicated AWS EC2 instance, designed for real-time reinforcement learning:
+
+1. **API Gateway & Security:** Nginx Reverse Proxy with Let's Encrypt SSL (HTTPS). The AWS firewall strictly blocks direct port access (Port 8000), routing all traffic through Port 443.
+2. **Infrastructure as Code (IaC):** The entire AWS environment is automated using **Ansible**.
+3. **Micro-Batched Learning:** To minimize network overhead, user feedback is cached locally via SQLite. The system batches interactions before triggering a high-priority cloud upload.
+4. **Cloud Persistence:** Utilizes Supabase PostgreSQL for persistent analytics logging and Supabase Object Storage for model artifacts.
+
+---
+
+## 📂 File Structure
 
 The project follows a strict **Micro-Zoned Architecture** to separate Data Science logic from Web Backend logic.
 
@@ -54,7 +53,7 @@ adaptive_finance_ai/
 │   └── sign_models.py           # Cryptographically signs trained models (.pkl) with HMAC
 ├── shared_core/                 # Shared resources between Training and Inference
 │   ├── features.py              # Centralized feature engineering and definitions
-│   ├── llm_advisor.py           # Async Google Gemini integration, Circuit Breaker & aiosqlite Cache
+│   ├── llm_advisor.py           # Async Google Gemini integration & Circuit Breaker
 │   ├── models.py                # Custom LinUCB Contextual Bandit implementation
 │   ├── preprocessing.py         # KBinsDiscretizer & Log1p math pipelines
 │   └── schemas.py               # Strict Pydantic contracts for API validation
@@ -74,8 +73,8 @@ adaptive_finance_ai/
 ├── zone_3_inference/            # Production Web Backend
 │   └── app/
 │       ├── main.py              # FastAPI Gateway (CORS, Background Tasks, Endpoints)
-├       |── templates/           # Jinja2 HTML templates for the Web Dashboard
-        | └── dashboard.html     # Chart.js UI for real-time model monitoring
+│       ├── templates/           # Jinja2 HTML templates for the Web Dashboard
+│       │   └── dashboard.html   # Chart.js UI for real-time model monitoring
 │       └── services/
 │           └── prediction_service.py # Core logic bridging the Bandit, LLM, and UUID Cache
 ├── .env                         # Environment variables (Ignored in Git)
@@ -97,7 +96,7 @@ adaptive_finance_ai/
 
 ```bash
 # Clone the repository
-git clone [https://github.com/YOUR_USERNAME/adaptive-finance-backend.git](https://github.com/YOUR_USERNAME/adaptive-finance-backend.git)
+git clone https://github.com/YOUR_USERNAME/adaptive-finance-backend.git
 cd adaptive-finance-backend
 
 # Create Virtual Environment
@@ -119,15 +118,11 @@ Create a `.env` file in the root directory:
 GEMINI_API_KEY=your_google_gemini_key_here
 
 # --- Security ---
-# The password your App sends to the Server
 API_ACCESS_TOKEN=my_thesis_access_token_2026
-
-# Key used to sign/verify model integrity
 MODEL_SIGNING_KEY=my_super_secret_thesis_key_2026
 
 # --- CORS Rules ---
-# Comma separated list. 10.0.2.2 is required for Android Emulator testing.
-ALLOWED_ORIGINS=http://localhost:8000,[http://10.0.2.2:8000](http://10.0.2.2:8000)
+ALLOWED_ORIGINS=http://localhost:8000,http://10.0.2.2:8000,https://adaptivefinance.duckdns.org
 
 ```
 
@@ -138,19 +133,17 @@ python zone_3_inference/app/main.py
 
 ```
 
-Visit `http://127.0.0.1:8000/docs` to access the Swagger UI and test the endpoints.
-`https://adaptive-finance-backend.onrender.com/docs` or use this
+Visit `http://127.0.0.1:8000/docs` to access the local Swagger UI. For the live production environment, visit `https://adaptivefinance.duckdns.org/docs`.
 
 ---
 
 ## 📡 API Usage (The Stateless Loop)
 
-The system operates on a two-step reinforcement learning loop using background tasks and an async SQLite cache.
+The system operates on a two-step reinforcement learning loop.
 
 ### Step 1: Request Prediction
 
 **Endpoint:** `POST /predict/v1/context`
-
 **Headers:** `Content-Type: application/json` | `X-API-Token: <YOUR_ACCESS_TOKEN>`
 
 **Request:**
@@ -186,10 +179,7 @@ The system operates on a two-step reinforcement learning loop using background t
 
 ### Step 2: Submit Feedback (Learning)
 
-*The Android app must send back the `prediction_id` so the AI can learn from the interaction.*
-
 **Endpoint:** `POST /predict/v1/feedback`
-
 **Headers:** `Content-Type: application/json` | `X-API-Token: <YOUR_ACCESS_TOKEN>`
 
 **Request:**
@@ -202,46 +192,87 @@ The system operates on a two-step reinforcement learning loop using background t
 
 ```
 
-*(Reward is `1.0` if the user clicked/engaged, `0.0` if they ignored the notification).*
-
-**Response:** Returns a `202 Accepted` status immediately, while the Bandit matrix updates and atomically re-signs its `.pkl` file in a background worker thread.
+*(Returns a `202 Accepted` status immediately, while the Bandit matrix updates and atomically re-signs its `.pkl` file in a background worker thread).*
 
 ---
 
-## 🧪 Testing & Training
-
-**Retraining the Brain from Scratch:**
-To rebuild the Data Science environment, test Epsilon Decay, and generate the 9-panel dashboard:
-
-```bash
-python zone_1_training/trainer.py
-
-```
-
-**Manual Security Verification:**
-To verify the cryptographic integrity of the models without booting the server:
-
-```bash
-python scripts/sign_models.py
-
-```
-
----
-3. Add a new 📊 Monitoring section (Put this right above the License section at the bottom):
 ## 📊 Live Monitoring Dashboard
 
-The system includes a zero-configuration MLOps dashboard to monitor the AI's real-time performance without heavy external dependencies (like Prometheus or Grafana).
+The system includes a zero-configuration MLOps dashboard to monitor the AI's real-time performance without heavy external dependencies.
 
 **To access the dashboard:**
-1. Run the server locally or deploy to the cloud.
-2. Navigate to: `https://adaptive-finance-backend.onrender.com/admin/dashboard`.
+Navigate to: `https://adaptivefinance.duckdns.org/admin/dashboard`
 
 **Tracked Metrics:**
-* **Action Distribution:** A pie chart showing the percentage of traffic allocated to each gamification strategy (Strict Budget, Cool Off, etc.).
+
+* **Action Distribution:** A pie chart showing the percentage of traffic allocated to each gamification strategy.
 * **Success Rate (CTR):** A bar chart tracking the real-world reward conversion rate of each arm, proving the Bandit is identifying the optimal strategy.
 
+---
+
+## ⚙️ Developer Command Cheat Sheet
+
+Below is the complete log of terminal commands used to provision, secure, and deploy the AWS EC2 infrastructure from a local Windows Subsystem for Linux (WSL) environment.
+
+### 1. Local WSL & SSH Key Preparation
+
+```bash
+# Copy the downloaded AWS key into the Linux home directory
+cp /mnt/c/Users/User/Downloads/fyp-key.pem ~
+
+# Lock the file permissions (Read-only for the owner)
+chmod 400 ~/fyp-key.pem
+
+# Establish a secure SSH tunnel into the EC2 instance
+ssh -i "~/fyp-key.pem" ubuntu@3.26.148.159
+
+```
+
+### 2. Infrastructure as Code (Ansible)
+
+```bash
+# Install Ansible on the local WSL machine
+sudo apt update && sudo apt install ansible -y
+
+# Test the connection to the AWS server
+ansible -i inventory.ini all -m ping
+
+# Execute the master deployment playbook
+ansible-playbook -i inventory.ini setup.yml
+
+```
+
+### 3. Server Monitoring & Debugging
+
+```bash
+# Follow the live, real-time logs of the AI backend daemon
+sudo journalctl -u adaptive-finance -f
+
+```
+
+### 4. Reverse Proxy & SSL Configuration (Nginx)
+
+```bash
+# Install Nginx and Certbot on AWS
+sudo apt update
+sudo apt install nginx certbot python3-certbot-nginx -y
+
+# Create symlink and remove default placeholder
+sudo ln -s /etc/nginx/sites-available/adaptivefinance /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default
+
+# Test Nginx syntax and restart
+sudo nginx -t
+sudo systemctl restart nginx
+
+# Generate SSL certificate and enforce HTTPS
+sudo certbot --nginx -d adaptivefinance.duckdns.org
+
+```
+
+---
 
 📜 **License:** Distributed under the MIT License.
 
-🎓 **Developed for:** BSc Computer Science Final Year Project (2026).
+🎓 **Developed for:** BSc Computer Science Final Year Project (2026) - Asia Pacific University of Technology and Innovation.
 
