@@ -68,7 +68,8 @@ class AsyncSQLiteCache:
                             prediction_id TEXT,
                             action_name TEXT,
                             reward REAL,
-                            timestamp REAL
+                            timestamp REAL,
+                            uncertainty REAL DEFAULT 0.0
                         )
                     """)
                     await db.commit()
