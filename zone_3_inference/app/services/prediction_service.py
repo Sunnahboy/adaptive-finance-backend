@@ -214,6 +214,7 @@ class PredictionService:
             #1. Preprocess (uses helper for cleaner and type-safe)
             context_df = request.to_dataframe()
             context_vector = self.preprocessor.transform(context_df)
+           
 
             # 2. Bandit Decision (Fast - CPU bound)
             chosen_arm_idx, debug_info = self.bandit.select_arm(context_vector[0])
@@ -229,9 +230,18 @@ class PredictionService:
             )
 
             #4. save context state for feedback loop
+            # extract the  uncertainty score from the bandit's math
+            arm_debug = debug_info.get(chosen_arm_idx,{})
+            uncertainty_score = float(arm_debug.get("uncertainty", 0.0))
+            user_volatility = getattr(request.features, 'spending_volatility', 0.0)
+            segment = "High Volatility" if user_volatility > 0.8 else "Stable"
+
+
             cache_payload = json.dumps({
                 "arm_index": native_arm_idx,
-                "context": context_vector[0].tolist()
+                "context": context_vector[0].tolist(),
+                "uncertainty": uncertainty_score, #save is hidden in server cache
+                "segment": segment
             })
             await self.advisor.cache.put(f"pred_{pred_id}", cache_payload)
 
@@ -276,6 +286,8 @@ class PredictionService:
             cached_data = json.loads(cached_data_str)
             arm_index = cached_data["arm_index"]
             context_vector = np.array(cached_data["context"])
+            uncertainty_score = cached_data.get("uncertainty", 0.0) #read from cache
+            segment = cached_data.get("segment", "Unknown")
 
             # 3 update the bandit brain
             self.bandit.update(arm_index,context_vector, request.reward)
@@ -303,7 +315,9 @@ class PredictionService:
                     self.supabase.table("analytics_log").insert({
                         "prediction_id": request.prediction_id,
                         "action_name": action_name,
-                        "reward": request.reward
+                        "reward": request.reward,
+                        "uncertainty": uncertainty_score, #save to cloud
+                        "user_segment": segment
                     }).execute()
                 except Exception as db_err:
                     logger.error(f"Supabase Analytics Error: {db_err}")
