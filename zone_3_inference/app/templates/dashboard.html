@@ -1,76 +1,859 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Adaptive Finance AI - Dashboard</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adaptive Finance AI - MLOps Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: Arial, sans-serif; background: #f4f7f6; padding: 20px; }
-        .container { display: flex; gap: 20px; max-width: 1000px; margin: auto; }
-        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 50%; }
-        h1 { text-align: center; color: #333; }
-        .error { color: red; text-align: center; }
+        * { box-sizing: border-box; }
+        
+        :root {
+            --bg-main: #0f1419;
+            --bg-card: #1a1f2e;
+            --bg-elevated: #252d3d;
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border-color: #2d3748;
+            
+            /* Accent Palette */
+            --color-cyan: #06b6d4;
+            --color-green: #10b981;
+            --color-red: #ef4444;
+            --color-yellow: #f59e0b;
+            --color-blue: #3b82f6;
+            
+            /* Semantic Backgrounds */
+            --alert-bg: rgba(239, 68, 68, 0.08);
+            --success-bg: rgba(16, 185, 129, 0.08);
+            --info-bg: rgba(6, 182, 212, 0.08);
+            --warning-bg: rgba(245, 158, 11, 0.08);
+        }
+
+        html { scroll-behavior: smooth; }
+        body { 
+            font-family: 'Poppins', sans-serif;
+            background: var(--bg-main);
+            color: var(--text-main);
+            margin: 0;
+            padding: 16px;
+            line-height: 1.6;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .header-left h1 {
+            margin: 0;
+            font-size: 1.8em;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-icon {
+            font-size: 1.4em;
+            animation: rotate 20s linear infinite;
+        }
+
+        @keyframes rotate { 100% { transform: rotate(360deg); } }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            background: var(--success-bg);
+            border: 1px solid var(--color-green);
+            color: var(--color-green);
+            border-radius: 6px;
+            font-size: 0.85em;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .pulse {
+            width: 6px;
+            height: 6px;
+            background: var(--color-green);
+            border-radius: 50%;
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            animation: pulse-ring 2s infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        .tooltip-trigger {
+            cursor: help;
+            border-bottom: 1px dotted var(--text-muted);
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip-trigger:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 125%;
+            left: 0;
+            background: var(--bg-elevated);
+            color: var(--text-main);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            white-space: nowrap;
+            border: 1px solid var(--border-color);
+            z-index: 1000;
+            font-family: 'Poppins', sans-serif;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .alerts-container {
+            margin-bottom: 24px;
+            padding: 16px;
+            background: var(--alert-bg);
+            border: 1px solid var(--color-red);
+            border-radius: 8px;
+            display: none;
+        }
+
+        .alerts-container.active { display: block; }
+
+        .alert-title {
+            font-weight: 700;
+            color: var(--color-red);
+            margin: 0 0 8px 0;
+            font-size: 0.95em;
+        }
+
+        .alert-item {
+            font-size: 0.85em;
+            color: var(--text-muted);
+            margin: 6px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .alert-item::before {
+            content: "⚠";
+            position: absolute;
+            left: 0;
+            color: var(--color-red);
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .kpi-card {
+            background: var(--bg-card);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--color-cyan);
+        }
+
+        .kpi-card.alert::before { background: var(--color-red); }
+        .kpi-card.success::before { background: var(--color-green); }
+
+        .kpi-label {
+            font-size: 0.75em;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .kpi-value {
+            font-size: 2.2em;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: -1px;
+        }
+
+        .kpi-delta {
+            font-size: 0.85em;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+
+        .kpi-delta.positive { color: var(--color-green); }
+        .kpi-delta.negative { color: var(--color-red); }
+        .kpi-delta.neutral { color: var(--text-muted); }
+
+        .kpi-subtext {
+            font-size: 0.8em;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        .health-score {
+            background: var(--bg-card);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 24px;
+        }
+
+        .health-title {
+            font-size: 0.9em;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin: 0 0 12px 0;
+            letter-spacing: 0.5px;
+        }
+
+        .health-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--bg-elevated);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        .health-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--color-green), var(--color-cyan));
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .health-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8em;
+            color: var(--text-muted);
+        }
+
+        .insights-panel {
+            background: var(--info-bg);
+            border: 1px solid var(--color-cyan);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+            display: none;
+        }
+
+        .insights-panel.active { display: block; }
+
+        .insights-title {
+            font-weight: 700;
+            color: var(--color-cyan);
+            margin: 0 0 8px 0;
+            font-size: 0.95em;
+        }
+
+        .insight-item {
+            font-size: 0.85em;
+            color: var(--text-main);
+            margin: 6px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .insight-item::before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: var(--color-cyan);
+            font-weight: 700;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .chart-card {
+            background: var(--bg-card);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .chart-title {
+            font-weight: 600;
+            color: var(--text-main);
+            font-size: 0.95em;
+            margin: 0;
+        }
+
+        .chart-subtitle {
+            font-size: 0.7em;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            font-weight: 500;
+        }
+
+        canvas { max-height: 280px; }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+            font-size: 0.8em;
+            color: var(--text-muted);
+            margin-top: 32px;
+        }
+
+        .refresh-timer {
+            display: inline-block;
+            font-family: 'JetBrains Mono', monospace;
+            margin-left: 8px;
+        }
+
+        @media (max-width: 1024px) {
+            .charts-grid, .kpi-grid { grid-template-columns: 1fr; }
+        }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-card); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--color-cyan); }
     </style>
 </head>
 <body>
-    <h1>🧠 AI Performance Dashboard</h1>
-    
-    {% if error_msg %}
-        <p class="error"><strong>System Notice:</strong> {{ error_msg }}</p>
-    {% endif %}
+    <div class="header">
+        <div class="header-left">
+            <h1>
+                <span class="header-icon">⟳</span>
+                Adaptive Finance AI
+            </h1>
+        </div>
+        <div class="status-badge">
+            <span class="pulse"></span>
+            Supabase Cloud Active
+        </div>
+    </div>
 
-    <div class="container">
-        <div class="card">
-            <h3>Action Distribution</h3>
-            <canvas id="distChart"></canvas>
+    <div class="alerts-container" id="alertsContainer">
+        <div class="alert-title">⚠ System Alerts</div>
+        <div id="alertsList"></div>
+    </div>
+
+    <div class="insights-panel" id="insightsPanel">
+        <div class="insights-title">💡 Recommended Actions</div>
+        <div id="insightsList"></div>
+    </div>
+
+    <div class="health-score">
+        <div class="health-title">System Health</div>
+        <div class="health-bar">
+            <div class="health-bar-fill" id="healthBarFill" style="width: 0%;"></div>
         </div>
-        <div class="card">
-            <h3>Success Rate (CTR %)</h3>
-            <canvas id="ctrChart"></canvas>
+        <div class="health-label">
+            <span>Stability & Performance</span>
+            <span id="healthScore">Calculating...</span>
         </div>
+    </div>
+
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-label">
+                <span>Total Interactions
+                    <span class="tooltip-trigger" data-tooltip="Cumulative user interactions processed by the system">?</span>
+                </span>
+            </div>
+            <div class="kpi-value" id="kpi-interactions">0</div>
+            <div class="kpi-delta neutral" id="kpi-interactions-delta">No history yet</div>
+            <p class="kpi-subtext">Lifetime processed events</p>
+        </div>
+
+        <div class="kpi-card" id="card-ctr">
+            <div class="kpi-label">
+                <span>Success Rate (CTR)
+                    <span class="tooltip-trigger" data-tooltip="Click-through rate: % of suggestions accepted by users">?</span>
+                </span>
+            </div>
+            <div class="kpi-value" id="kpi-ctr">0%</div>
+            <div class="kpi-delta neutral" id="kpi-ctr-delta">No history yet</div>
+            <p class="kpi-subtext">Rolling daily average</p>
+        </div>
+
+        <div class="kpi-card" id="card-uncertainty">
+            <div class="kpi-label">
+                <span>System Uncertainty
+                    <span class="tooltip-trigger" data-tooltip="Exploration bound: measures algorithm confidence. Lower is better.">?</span>
+                </span>
+            </div>
+            <div class="kpi-value" id="kpi-uncertainty">0.00</div>
+            <div class="kpi-delta neutral" id="kpi-uncertainty-delta">No history yet</div>
+            <p class="kpi-subtext">Latest bound (lower = confident)</p>
+        </div>
+
+        <div class="kpi-card success">
+            <div class="kpi-label">
+                <span>Business Value
+                    <span class="tooltip-trigger" data-tooltip="Cumulative reward: total successful conversions generated">?</span>
+                </span>
+            </div>
+            <div class="kpi-value" id="kpi-value">0</div>
+            <div class="kpi-delta neutral" id="kpi-value-delta">No history yet</div>
+            <p class="kpi-subtext">Lifetime rewards earned</p>
+        </div>
+    </div>
+
+    <div class="charts-grid">
+        <div class="chart-card">
+            <div class="chart-header">
+                <div>
+                    <div class="chart-title">Learning Curve Trajectory</div>
+                    <div class="chart-subtitle">Daily CTR % over time</div>
+                </div>
+            </div>
+            <canvas id="learningCurveChart"></canvas>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <div>
+                    <div class="chart-title">System Confidence</div>
+                    <div class="chart-subtitle">Uncertainty bound (↓ = more confident)</div>
+                </div>
+            </div>
+            <canvas id="uncertaintyChart"></canvas>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <div>
+                    <div class="chart-title">Action Selection Balance</div>
+                    <div class="chart-subtitle">Distribution of decisions across actions</div>
+                </div>
+            </div>
+            <canvas id="distributionChart"></canvas>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <div>
+                    <div class="chart-title">Cumulative Value Creation</div>
+                    <div class="chart-subtitle">Rewards earned over time</div>
+                </div>
+            </div>
+            <canvas id="cumulativeChart"></canvas>
+        </div>
+
+        <div class="chart-card full-width">
+            <div class="chart-header">
+                <div>
+                    <div class="chart-title">Contextual Performance Validation</div>
+                    <div class="chart-subtitle">Action Success Rate (CTR %) Segmented by User Profile</div>
+                </div>
+            </div>
+            <canvas id="contextChart" height="280"></canvas>
+        </div>
+    </div>
+
+    <div class="footer">
+        <span>Last updated: <span id="lastUpdate">just now</span></span>
+        <span class="refresh-timer">Auto-refresh: <span id="refreshCountdown">30s</span></span>
     </div>
 
     <script id="chart-data" type="application/json">
         {
             "labels": {{ labels | tojson }},
             "counts": {{ counts | tojson }},
-            "successRates": {{ success_rates | tojson }}
+            "trendLabels": {{ trend_labels | tojson }},
+            "trendCtr": {{ trend_ctr | tojson }},
+            "trendUncertainty": {{ trend_uncertainty | tojson }},
+            "cumulativeRewards": {{ cumulative_rewards | tojson }},
+            "contextData": {{ context_data | tojson }}  
         }
     </script>
 
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            
-            // 1. Read the data securely from the hidden island
-            const rawData = document.getElementById('chart-data').textContent;
-            const chartData = JSON.parse(rawData);
+            const chartData = JSON.parse(document.getElementById('chart-data').textContent);
 
-            // 2. Render Pie Chart
-            new Chart(document.getElementById('distChart'), {
-                type: 'doughnut',
-                data: {
-                    labels: chartData.labels,
-                    datasets: [{ 
-                        data: chartData.counts, 
-                        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'] 
-                    }]
+            // --- AUTHENTIC MATHEMATICAL CALCULATIONS ---
+            const historyLength = chartData.trendCtr ? chartData.trendCtr.length : 0;
+            const hasHistory = historyLength > 1;
+
+            const previousPeriodData = {
+                interactions: hasHistory ? chartData.cumulativeRewards[historyLength - 2] : 0,
+                ctr: hasHistory ? chartData.trendCtr[historyLength - 2] : (chartData.trendCtr ? chartData.trendCtr[0] : 0),
+                uncertainty: hasHistory ? chartData.trendUncertainty[historyLength - 2] : (chartData.trendUncertainty ? chartData.trendUncertainty[0] : 0),
+                value: hasHistory ? chartData.cumulativeRewards[historyLength - 2] : 0
+            };
+
+            const currentPeriodData = {
+                interactions: historyLength > 0 ? chartData.cumulativeRewards[historyLength - 1] : 0,
+                ctr: historyLength > 0 ? chartData.trendCtr[historyLength - 1] : 0,
+                uncertainty: historyLength > 0 ? chartData.trendUncertainty[historyLength - 1] : 0,
+                value: historyLength > 0 ? chartData.cumulativeRewards[historyLength - 1] : 0
+            };
+
+            function calculateDelta(current, previous) {
+                if (previous === 0 && current === 0) return { percent: "0.0", direction: "→", sign: "", value: "0", isPositive: true };
+                if (previous === 0) return { percent: "100.0", direction: "↗", sign: "+", value: current.toFixed(1), isPositive: true };
+                
+                const delta = current - previous;
+                const percent = ((delta / previous) * 100).toFixed(1);
+                const direction = delta >= 0 ? '↗' : '↙';
+                const sign = delta >= 0 ? '+' : '';
+                return {
+                    percent,
+                    direction,
+                    sign,
+                    value: Math.abs(delta).toFixed(1),
+                    isPositive: delta >= 0
+                };
+            }
+
+            function getStatusClass(metric, value) {
+                switch(metric) {
+                    case 'ctr': return value >= 60 ? 'success' : (value >= 40 ? 'warning' : 'alert');
+                    case 'uncertainty': return value <= 0.30 ? 'success' : (value <= 0.40 ? 'warning' : 'alert');
+                    default: return 'success';
                 }
-            });
+            }
 
-            // 3. Render Bar Chart
-            new Chart(document.getElementById('ctrChart'), {
-                type: 'bar',
+            if (historyLength === 0) {
+                document.getElementById('kpi-interactions').innerText = "0";
+                return; 
+            }
+
+            // Populate KPIs
+            const totalInteractions = chartData.counts.reduce((a, b) => a + b, 0);
+            
+            // 1. Interactions
+            document.getElementById('kpi-interactions').innerText = totalInteractions.toLocaleString();
+            if (hasHistory) {
+                const intDelta = calculateDelta(currentPeriodData.interactions, previousPeriodData.interactions);
+                document.getElementById('kpi-interactions-delta').className = `kpi-delta positive`;
+                document.getElementById('kpi-interactions-delta').innerText = `${intDelta.direction} ${intDelta.sign}${intDelta.percent}% DoD`;
+            }
+
+            // 2. CTR
+            const ctrStatus = getStatusClass('ctr', currentPeriodData.ctr);
+            document.getElementById('card-ctr').className = `kpi-card ${ctrStatus}`;
+            document.getElementById('kpi-ctr').innerText = currentPeriodData.ctr.toFixed(1) + '%';
+            if (hasHistory) {
+                const ctrDelta = calculateDelta(currentPeriodData.ctr, previousPeriodData.ctr);
+                const deltaColor = ctrDelta.isPositive ? 'positive' : 'negative';
+                document.getElementById('kpi-ctr-delta').className = `kpi-delta ${deltaColor}`;
+                document.getElementById('kpi-ctr-delta').innerText = `${ctrDelta.direction} ${ctrDelta.sign}${Math.abs(currentPeriodData.ctr - previousPeriodData.ctr).toFixed(1)}% vs yesterday`;
+            }
+
+            // 3. Uncertainty
+            const uncStatus = getStatusClass('uncertainty', currentPeriodData.uncertainty);
+            document.getElementById('card-uncertainty').className = `kpi-card ${uncStatus}`;
+            document.getElementById('kpi-uncertainty').innerText = currentPeriodData.uncertainty.toFixed(3);
+            if (hasHistory) {
+                const uncDelta = calculateDelta(currentPeriodData.uncertainty, previousPeriodData.uncertainty);
+                const deltaColor = !uncDelta.isPositive ? 'positive' : 'negative'; 
+                document.getElementById('kpi-uncertainty-delta').className = `kpi-delta ${deltaColor}`;
+                document.getElementById('kpi-uncertainty-delta').innerText = `${uncDelta.direction} ${Math.abs(uncDelta.value)} vs yesterday`;
+            }
+
+            // 4. Value
+            document.getElementById('kpi-value').innerText = currentPeriodData.value.toLocaleString();
+            if (hasHistory) {
+                const valDelta = calculateDelta(currentPeriodData.value, previousPeriodData.value);
+                document.getElementById('kpi-value-delta').className = `kpi-delta positive`;
+                document.getElementById('kpi-value-delta').innerText = `${valDelta.direction} ${valDelta.sign}${valDelta.percent}% DoD`;
+            }
+
+            // Health Score
+            const healthScore = Math.min(100, Math.max(0, Math.round((currentPeriodData.ctr / 100) * 50 + (1 - Math.min(currentPeriodData.uncertainty, 1)) * 50)));
+            document.getElementById('healthScore').innerText = healthScore + '%';
+            document.getElementById('healthBarFill').style.width = healthScore + '%';
+
+            // Alerts
+            const alerts = [];
+            if (currentPeriodData.uncertainty > 0.40 && hasHistory) {
+                alerts.push(`High uncertainty (${currentPeriodData.uncertainty.toFixed(2)}). The system is heavily exploring the environment.`);
+            }
+            if (currentPeriodData.ctr < 30 && hasHistory) {
+                alerts.push(`CTR is below baseline 30%. Review recent Android client interactions.`);
+            }
+            if (alerts.length > 0) {
+                document.getElementById('alertsContainer').classList.add('active');
+                document.getElementById('alertsList').innerHTML = alerts.map(a => `<div class="alert-item">${a}</div>`).join('');
+            }
+
+            // Insights
+            const insights = [];
+            if (hasHistory) {
+                const ctrDelta = calculateDelta(currentPeriodData.ctr, previousPeriodData.ctr);
+                insights.push(`CTR is trending ${ctrDelta.isPositive ? 'up' : 'down'} natively.`);
+            }
+            if (chartData.counts.length > 1) {
+                const maxActionCount = Math.max(...chartData.counts);
+                const maxActionIndex = chartData.counts.indexOf(maxActionCount);
+                const total = chartData.counts.reduce((a, b) => a + b, 0);
+                insights.push(`Action "${chartData.labels[maxActionIndex]}" is dominating selection at ${((maxActionCount/total)*100).toFixed(1)}%.`);
+            }
+            if (insights.length > 0) {
+                document.getElementById('insightsPanel').classList.add('active');
+                document.getElementById('insightsList').innerHTML = insights.map(i => `<div class="insight-item">${i}</div>`).join('');
+            }
+
+            // --- CHART.JS RENDERING ---
+            Chart.defaults.color = '#94a3b8';
+            Chart.defaults.font.family = "'Poppins', sans-serif";
+            Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(26, 31, 46, 0.95)';
+            Chart.defaults.plugins.tooltip.titleColor = '#e2e8f0';
+            Chart.defaults.plugins.tooltip.bodyColor = '#94a3b8';
+            Chart.defaults.plugins.tooltip.borderColor = '#2d3748';
+            Chart.defaults.plugins.tooltip.borderWidth = 1;
+
+            const darkGridOptions = { color: '#2d3748', drawBorder: false };
+
+            // 1. Learning Curve Chart
+            new Chart(document.getElementById('learningCurveChart'), {
+                type: 'line',
                 data: {
-                    labels: chartData.labels,
-                    datasets: [{ 
-                        label: 'Click Rate (%)', 
-                        data: chartData.successRates, 
-                        backgroundColor: '#36A2EB' 
+                    labels: chartData.trendLabels,
+                    datasets: [{
+                        label: 'Daily CTR %',
+                        data: chartData.trendCtr,
+                        borderColor: '#06b6d4',
+                        backgroundColor: 'rgba(6, 182, 212, 0.08)',
+                        borderWidth: 2.5, 
+                        fill: true, 
+                        tension: 0,
+                        pointRadius: 5,               
+                        pointHoverRadius: 8,          
+                        pointBackgroundColor: '#06b6d4', 
+                        pointBorderColor: '#1a1f2e',
+                        pointBorderWidth: 2
                     }]
                 },
                 options: { 
-                    scales: { y: { beginAtZero: true, max: 100 } } 
+                    maintainAspectRatio: false, 
+                    responsive: true, 
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { display: false } }, 
+                    scales: { 
+                        x: { grid: { display: false } }, 
+                        y: { beginAtZero: true, max: 100, grid: darkGridOptions } 
+                    } 
                 }
             });
+
+            // 2. Uncertainty Chart
+            new Chart(document.getElementById('uncertaintyChart'), {
+                type: 'line',
+                data: {
+                    labels: chartData.trendLabels,
+                    datasets: [{
+                        label: 'Uncertainty Score',
+                        data: chartData.trendUncertainty,
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                        borderWidth: 2.5, 
+                        fill: true, 
+                        tension: 0,
+                        pointRadius: 5,               
+                        pointHoverRadius: 8,          
+                        pointBackgroundColor: '#f59e0b', 
+                        pointBorderColor: '#1a1f2e',
+                        pointBorderWidth: 2
+                    }]
+                },
+                options: { 
+                    maintainAspectRatio: false, 
+                    responsive: true, 
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { display: false } }, 
+                    scales: { 
+                        x: { grid: { display: false } }, 
+                        y: { grid: darkGridOptions } 
+                    } 
+                }
+            });
+
+            // 3. Action Distribution
+            new Chart(document.getElementById('distributionChart'), {
+                type: 'bar',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [{
+                        label: 'Times Selected',
+                        data: chartData.counts,
+                        backgroundColor: ['#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'],
+                        borderRadius: 4
+                    }]
+                },
+                options: { 
+                    maintainAspectRatio: false, 
+                    responsive: true,
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const total = chartData.counts.reduce((a, b) => a + b, 0);
+                                    const percent = ((context.parsed.y / total) * 100).toFixed(1);
+                                    return ` ${context.parsed.y} selections (${percent}%)`;
+                                }
+                            }
+                        }
+                    }, 
+                    scales: { 
+                        x: { grid: { display: false } }, 
+                        y: { grid: darkGridOptions } 
+                    } 
+                }
+            });
+
+            // 4. Cumulative Rewards
+            new Chart(document.getElementById('cumulativeChart'), {
+                type: 'line',
+                data: {
+                    labels: chartData.trendLabels,
+                    datasets: [{
+                        label: 'Total Rewards',
+                        data: chartData.cumulativeRewards,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                        borderWidth: 2.5, 
+                        fill: true, 
+                        tension: 0,
+                        pointRadius: 5,               
+                        pointHoverRadius: 8,          
+                        pointBackgroundColor: '#10b981',
+                        pointBorderColor: '#1a1f2e',
+                        pointBorderWidth: 2
+                    }]
+                },
+                options: { 
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { display: false } }, 
+                    scales: { 
+                        x: { grid: { display: false } }, 
+                        y: { grid: darkGridOptions } 
+                    } 
+                }
+            });
+
+            // 5. Contextual Performance (Grouped Bar Chart)
+            const rawContextData = chartData.contextData || [];
+            const uniqueActions = [...new Set(rawContextData.map(d => d.action))];
+            
+            const stableData = uniqueActions.map(act => {
+                const match = rawContextData.find(d => d.action === act && d.segment === 'Stable');
+                return match ? match.ctr : 0;
+            });
+            
+            const highVolData = uniqueActions.map(act => {
+                const match = rawContextData.find(d => d.action === act && d.segment === 'High Volatility');
+                return match ? match.ctr : 0;
+            });
+
+            new Chart(document.getElementById('contextChart'), {
+                type: 'bar',
+                data: {
+                    labels: uniqueActions,
+                    datasets: [
+                        {
+                            label: 'Stable Users',
+                            data: stableData,
+                            backgroundColor: '#3b82f6',
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'High Volatility Users',
+                            data: highVolData,
+                            backgroundColor: '#ef4444',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    plugins: {
+                        legend: { 
+                            display: true, 
+                            position: 'top',
+                            labels: { color: '#94a3b8', font: { family: "'Poppins', sans-serif" } }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.parsed.y.toFixed(1) + '% CTR';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: { 
+                            beginAtZero: true, 
+                            max: 100, 
+                            grid: darkGridOptions,
+                            ticks: { callback: function(value) { return value + '%'; } }
+                        }
+                    }
+                }
+            });
+
+            // Timers
+            let countdown = 30;
+            setInterval(() => {
+                countdown--;
+                if (countdown <= 0) { countdown = 30; document.getElementById('lastUpdate').innerText = 'just now'; }
+                document.getElementById('refreshCountdown').innerText = countdown + 's';
+            }, 1000);
+            document.getElementById('lastUpdate').innerText = new Date().toLocaleTimeString();
         });
     </script>
 </body>
