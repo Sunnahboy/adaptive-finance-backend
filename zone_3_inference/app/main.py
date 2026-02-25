@@ -4,6 +4,10 @@ import os
 from pathlib import Path
 from collections import defaultdict
 from contextlib import asynccontextmanager
+from collections import defaultdict
+from datetime import datetime
+from fastapi.responses import HTMLResponse
+from fastapi import Request
 
 # 1. SETUP PATH 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -176,31 +180,90 @@ async def submit_feedback(request: FeedbackRequest, background_tasks: Background
 async def get_dashboard(request: Request):
     """Generate a live HTML dashboard pulling from Supabase Cloud."""
     labels, counts, success_rates = ["No Data"], [1], [0]
+    trend_labels, trend_ctr, trend_uncertainty, cumulative_rewards = [], [], [], []
     error_msg = None
 
     try:
         #1. Fetch data from Supabase instead of SQLite
         if prediction_service.supabase:
-            response = prediction_service.supabase.table("analytics_log").select("action_name, reward").execute()
+            response = prediction_service.supabase.table("analytics_log").select("action_name, reward,timestamp, uncertainty","user_segment").execute()
             data = response.data
             
             if data:
-                # 2. Calculate Distribution and CTR in Python
+                #A Calculate Action Distribution and CTR 
                 action_counts = defaultdict(int)
                 action_rewards = defaultdict(list)
                 
+                #B Calculate Timeline Grouping 
+                daily_stats = defaultdict(lambda: {"rewards": [], "uncertainties": [], "clicks": 0})
+                
                 for row in data:
-                    action = row["action_name"]
+                    # Tally Actions
+                    action = row.get("action_name", "unknown")
                     action_counts[action] += 1
-                    action_rewards[action].append(row["reward"])
+                    action_rewards[action].append(row.get("reward", 0))
                     
+                    # Parse Time (Handles both Float timestamps and Supabase ISO strings)
+                    raw_time = row.get("timestamp")
+                    if raw_time:
+                        if isinstance(raw_time, (int, float)):
+                            day = datetime.fromtimestamp(raw_time).strftime('%Y-%m-%d')
+                        else:
+                            day = str(raw_time)[:10] # Slices '2026-02-25T13:43:46' to '2026-02-25'
+                        
+                        daily_stats[day]["rewards"].append(row.get("reward", 0))
+                        daily_stats[day]["uncertainties"].append(row.get("uncertainty", 0.0) or 0.0)
+                        daily_stats[day]["clicks"] += row.get("reward", 0)
+
+                
+                #B.5 Calculate Contextual Segment Performance
+                context_stats = defaultdict(lambda: {"rewards": []})
+                
+                for row in data:
+                    action = row.get("action_name", "unknown")
+                    segment = row.get("user_segment", "Stable") #Default to Stable if missing
+                    if segment:
+                        context_stats[(action, segment)]["rewards"].append(row.get("reward", 0))
+
+                context_data = []
+                for (action, segment), stats in context_stats.items():
+                    if stats["rewards"]:
+                        ctr = round((sum(stats["rewards"]) / len(stats["rewards"])) * 100, 1)
+                        context_data.append({"action": action, "segment": segment, "ctr": ctr})
+
+
+                # Format Action Data
                 labels = list(action_counts.keys())
                 counts = [action_counts[label] for label in labels]
-                # Calculate average reward (CTR) percentage per action
                 success_rates = [
                     round((sum(action_rewards[label]) / len(action_rewards[label])) * 100, 1) 
                     for label in labels
                 ]
+
+                #C Format Timeline Data 
+                sorted_days = sorted(daily_stats.keys()) # Sort chronologically
+                trend_labels = sorted_days
+                
+                for day in sorted_days:
+                    # Daily CTR
+                    day_rewards = daily_stats[day]["rewards"]
+                    if day_rewards:
+                        trend_ctr.append(round((sum(day_rewards) / len(day_rewards)) * 100, 1))
+                    else:
+                        trend_ctr.append(0)
+                        
+                    # Daily Average Uncertainty
+                    day_uncerts = daily_stats[day]["uncertainties"]
+                    if day_uncerts:
+                        trend_uncertainty.append(round(sum(day_uncerts) / len(day_uncerts), 4))
+                    else:
+                        trend_uncertainty.append(0)
+                        
+                #D Calculate Cumulative Rewards 
+                current_total = 0
+                for day in sorted_days:
+                    current_total += daily_stats[day]["clicks"]
+                    cumulative_rewards.append(current_total)
         else:
             error_msg = "Supabase connection not initialized. Check .env keys."
 
@@ -216,6 +279,11 @@ async def get_dashboard(request: Request):
             "labels": labels,
             "counts": counts,
             "success_rates": success_rates,
+            "trend_labels": trend_labels,                 
+            "trend_ctr": trend_ctr,                       
+            "trend_uncertainty": trend_uncertainty,       
+            "cumulative_rewards": cumulative_rewards,
+            "context_data": context_data,
             "error_msg": error_msg
         }
     )
