@@ -8,6 +8,8 @@ import asyncio
 import aiosqlite
 from pathlib import Path
 from typing import Dict, Optional
+import urllib.request
+import itertools
 
 # Tenacity for smart retries
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
@@ -138,28 +140,58 @@ class LLMStrategyAdvisor:
 
     def __init__(self, api_key: Optional[str] = None, cache_size: int = 1000, skip_api_init: bool = False):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        self.or_key = os.getenv("OPENROUTER_API_KEY")
         
-        # Determine database path relative to this file
+        self.or_models = [
+            "mistralai/mistral-small-3.2-24b-instruct:free",
+            "meta-llama/llama-3.2-3b-instruct:free",
+            "google/gemma-3-4b-it:free",
+            "google/gemma-3-12b-it:free"
+        ]
+        
         base_path = Path(__file__).resolve().parent.parent
         db_path = base_path / "zone_2_artifacts" / "llm_cache.db"
-        
-        # Initialize SQLite Cache
         self.cache = AsyncSQLiteCache(db_path=str(db_path), max_size=cache_size)
         
         self.enabled = False
         self.client = None
         
-        # Circuit Breaker State
         self._cb_failures = 0
         self._cb_open_time = 0
         self._cb_is_open = False
 
         if not self.api_key:
             logger.error(" Missing GEMINI_API_KEY")
-            return 
-
-        if not skip_api_init and HAS_NEW_SDK:
+        elif not skip_api_init and HAS_NEW_SDK:
             self._init_api()
+
+        # Initialize the True Round-Robin Router once at startup
+        self._build_router_pool()
+
+    def _build_router_pool(self):
+        """Builds a deterministic, 50/50 weighted infinite iterator."""
+        pool = []
+        or_entries = [f"openrouter:{m}" for m in self.or_models] if self.or_key else []
+
+        if self.api_key:
+            if or_entries:
+                # Weight Gemini to perfectly match the number of OpenRouter models
+                pool.extend(["gemini_sdk"] * len(or_entries))
+            else:
+                pool.append("gemini_sdk")
+
+        pool.extend(or_entries)
+
+        if not pool:
+            self.router = None
+            self.pool_size = 0
+            return
+
+        # Shuffle once to interleave Gemini and OpenRouter 
+        random.shuffle(pool) 
+        self.router = itertools.cycle(pool) #Create the infinite loop
+        self.pool_size = len(pool)
+        logger.info(f" True Round-Robin Router initialized with {self.pool_size} nodes.")
 
     def _init_api(self):
         try:
@@ -244,11 +276,65 @@ class LLMStrategyAdvisor:
             self._record_failure(f"Exception: {str(e)}")
             # retry (unless circuit opens next time)
             raise e
+        
+    #RAW HTTP OPENROUTER LOGIC
+    def _call_openrouter_raw(self, prompt: str, model_id: str, max_tokens: int, temp: float) -> str:
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {self.or_key}", "Content-Type": "application/json"}
+        data = {
+            "model": model_id, 
+            "messages": [{"role": "user", "content": prompt}], 
+            "max_tokens": max_tokens, "temperature": temp
+        }
+        req = urllib.request.Request(url, data=json.dumps(data).encode("utf-8"), headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=4) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            return result["choices"][0]["message"]["content"].strip().strip('"')
+
+
+#True Weighted Round-Robin Orchestrator
+    async def _multiplex_generate(self, prompt: str, max_tokens: int = 60, temp: float = 0.7) -> Optional[str]:
+        if not hasattr(self, 'router') or not self.router:
+            logger.error("No LLM providers available in the routing pool!")
+            return None
+
+        attempts = 0
+        max_retries = self.pool_size
+
+        # Waterfall through the pre-calculated sequence
+        while attempts < max_retries:
+            route = next(self.router) # O(1) instantaneous rotation
+            attempts += 1
+
+            try:
+                if route == "gemini_sdk":
+                    # Dynamic fast-fail: Skip Gemini instantly if the circuit breaker is open
+                    if self._cb_is_open and not self._check_circuit_breaker():
+                        logger.debug("Skipping Gemini (Circuit Open), rotating...")
+                        continue
+
+                    res = await self._call_gemini_async(prompt, max_tokens, temp)
+                    if res:
+                        logger.info("Round-Robin: Routed via Gemini SDK")
+                        return res
+
+                elif route.startswith("openrouter:"):
+                    model_id = route.split("openrouter:")[1]
+                    res = await asyncio.to_thread(self._call_openrouter_raw, prompt, model_id, max_tokens, temp)
+                    if res:
+                        logger.info(f"Round-Robin: Routed via OpenRouter ({model_id})")
+                        return res
+
+            except Exception as e:
+                logger.debug(f"Route {route} failed: {e}. Rotating to next provider...")
+                continue
+
+        logger.error("Orchestrator failed: All APIs in the rotation are down or rate-limited.")
+        return None
 
     # ------------------------------------------------------------------
     # PUBLIC METHODS fully async aware
     # ------------------------------------------------------------------
-
     async def get_strategy_recommendation(self, user_features: Dict) -> str:
         vol = user_features.get('spending_volatility', 0)
         ret = user_features.get('return_rate', 0)
@@ -270,16 +356,11 @@ class LLMStrategyAdvisor:
         Output exactly one word: EXPLORE or EXPLOIT.
         """
         
-        try:
-            res = await self._call_gemini_async(prompt, max_tokens=10, temp=0.0)
-            final = "EXPLORE" if (res and "EXPLORE" in res.upper()) else "EXPLOIT"
+        res = await self._multiplex_generate(prompt, max_tokens=10, temp=0.0)
+        final = "EXPLORE" if (res and "EXPLORE" in res.upper()) else "EXPLOIT"
 
-            # Await the PUT
-            await self.cache.put(cache_key, final)
-            return final
-        except Exception:
-            # Final safety net if all retries fail
-            return "EXPLOIT"
+        await self.cache.put(cache_key, final)
+        return final
 
     async def generate_message(self, user_features: Dict, action_name: str) -> str:
         vol = user_features.get('spending_volatility', 0)
@@ -302,13 +383,11 @@ class LLMStrategyAdvisor:
             "cool_off": "🧊 Freeze spending for 24 hours."
         }
         
-        if not self.enabled or (self._cb_is_open and not self._check_circuit_breaker()):
-            return fallbacks.get(action_name, "Check your financial health!")
-
+        
         # Dynamic Prompt
         risk_context = "HIGH" if vol > 0.8 else "STABLE"
         prompt = f"""
-        You are an AI Assistant for a Student Budget App.
+        You are an AI Assistant for a Gamified Personal Finance App.
         The user has {risk_context} spending volatility ({vol:.2f}).
         
         TASK:
@@ -316,18 +395,15 @@ class LLMStrategyAdvisor:
         
         CONTEXT:
         - This is about DAILY CASH, NOT stock portfolios.
+        - Focus purely on their spending behavior, not their age or profession.
         - Tone: {current_vibe.upper()}.
         - Use exactly one emoji.
         
         Output strictly the message text:
         """
 
-        try:
-            msg = await self._call_gemini_async(prompt, max_tokens=60, temp=0.9)
-            if msg:
-                # AWAIT THE PUT
-                await self.cache.put(cache_key, msg)
-                return msg
-            return fallbacks.get(action_name, "Check your financial health! 📉")
-        except Exception:
-            return fallbacks.get(action_name, "Check your financial health! 📉")
+        msg = await self._multiplex_generate(prompt, max_tokens=60, temp=0.9)
+        final_msg = msg if msg else fallbacks.get(action_name, "Check your financial health! 📉")
+        
+        await self.cache.put(cache_key, final_msg)
+        return final_msg
