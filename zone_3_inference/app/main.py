@@ -181,12 +181,13 @@ async def get_dashboard(request: Request):
     """Generate a live HTML dashboard pulling from Supabase Cloud."""
     labels, counts, success_rates = ["No Data"], [1], [0]
     trend_labels, trend_ctr, trend_uncertainty, cumulative_rewards = [], [], [], []
+    context_data = [] 
     error_msg = None
 
     try:
         #1. Fetch data from Supabase instead of SQLite
         if prediction_service.supabase:
-            response = prediction_service.supabase.table("analytics_log").select("action_name, reward,timestamp, uncertainty","user_segment").execute()
+            response = prediction_service.supabase.table("analytics_log").select("action_name, reward,created_at, uncertainty","user_segment").execute()
             data = response.data
             
             if data:
@@ -204,7 +205,7 @@ async def get_dashboard(request: Request):
                     action_rewards[action].append(row.get("reward", 0))
                     
                     # Parse Time (Handles both Float timestamps and Supabase ISO strings)
-                    raw_time = row.get("timestamp")
+                    raw_time = row.get("created_at")
                     if raw_time:
                         if isinstance(raw_time, (int, float)):
                             day = datetime.fromtimestamp(raw_time).strftime('%Y-%m-%d')

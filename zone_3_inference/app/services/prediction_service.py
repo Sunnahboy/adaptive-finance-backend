@@ -241,7 +241,8 @@ class PredictionService:
                 "arm_index": native_arm_idx,
                 "context": context_vector[0].tolist(),
                 "uncertainty": uncertainty_score, #save is hidden in server cache
-                "segment": segment
+                "segment": segment,
+                "user_id": request.user_id
             })
             await self.advisor.cache.put(f"pred_{pred_id}", cache_payload)
 
@@ -310,10 +311,12 @@ class PredictionService:
             #5. Log to Supabase PostgreSQL (Permanent Analytics)
            
             action_name = self.actions.get(arm_index, "unknown")  # Define action_name first by mapping the arm_index
+            user_id = cached_data.get("user_id") #Retrieve from cache
             if self.supabase:
                 try:
                     self.supabase.table("analytics_log").insert({
                         "prediction_id": request.prediction_id,
+                        "user_id": user_id,
                         "action_name": action_name,
                         "reward": request.reward,
                         "uncertainty": uncertainty_score, #save to cloud
