@@ -211,10 +211,35 @@ class PredictionService:
         pred_id = str(uuid.uuid4())
 
         try:
-            #1. Preprocess (uses helper for cleaner and type-safe)
+            # SUPABASE CLOUD SYNC ---
+            expense_id = None
+            if self.supabase:
+                try:
+                    # 1. Ensure the User exists
+                    self.supabase.table("users").upsert({
+                        "user_id": request.user_id,
+                        "test_group": request.test_group
+                    }).execute()
+
+                    # 2. Look up the category_id
+                    cat_res = self.supabase.table("categories").select("category_id").eq("name", request.category).execute()
+                    category_id = cat_res.data[0]["category_id"] if cat_res.data else 1 
+
+                    # 3. Save the Expense
+                    exp_res = self.supabase.table("expenses").insert({
+                        "user_id": request.user_id,
+                        "category_id": category_id,
+                        "amount": request.amount
+                    }).execute()
+                    
+                    expense_id = exp_res.data[0]["expense_id"]
+                except Exception as db_err:
+                    logger.error(f"Supabase Cloud Sync Error: {db_err}")
+            # -----------------------------------
+
+            # 1. Preprocess (uses helper for cleaner and type-safe)
             context_df = request.to_dataframe()
             context_vector = self.preprocessor.transform(context_df)
-           
 
             # 2. Bandit Decision (Fast - CPU bound)
             chosen_arm_idx, debug_info = self.bandit.select_arm(context_vector[0])
@@ -229,24 +254,21 @@ class PredictionService:
                 self.advisor.generate_message(features_dict, action_name)
             )
 
-            #4. save context state for feedback loop
-            # extract the  uncertainty score from the bandit's math
-            arm_debug = debug_info.get(chosen_arm_idx,{})
+            # 4. Save context state for feedback loop
+            arm_debug = debug_info.get(chosen_arm_idx, {})
             uncertainty_score = float(arm_debug.get("uncertainty", 0.0))
             user_volatility = getattr(request.features, 'spending_volatility', 0.0)
             segment = "High Volatility" if user_volatility > 0.8 else "Stable"
 
-
             cache_payload = json.dumps({
                 "arm_index": native_arm_idx,
                 "context": context_vector[0].tolist(),
-                "uncertainty": uncertainty_score, #save is hidden in server cache
+                "uncertainty": uncertainty_score, 
                 "segment": segment,
-                "user_id": request.user_id
+                "user_id": request.user_id,
+                "expense_id": expense_id #Remember the expense for the feedback loop
             })
             await self.advisor.cache.put(f"pred_{pred_id}", cache_payload)
-
-            
 
             # Return Pydantic Response
             return PredictionResponse(
@@ -270,8 +292,9 @@ class PredictionService:
                 notification="Let's take a moment to reflect on your goals.",
                 visual_theme="gray",
                 debug_info={"error": str(e)}
-
             )
+        
+
     async def process_feedback(self, request: FeedbackRequest) -> None:
         """Background task: Fetches cached context, updates Bandit, saves securely to disk"""
         try:
@@ -312,11 +335,13 @@ class PredictionService:
            
             action_name = self.actions.get(arm_index, "unknown")  # Define action_name first by mapping the arm_index
             user_id = cached_data.get("user_id") #Retrieve from cache
+            expense_id = cached_data.get("expense_id")
             if self.supabase:
                 try:
                     self.supabase.table("analytics_log").insert({
                         "prediction_id": request.prediction_id,
                         "user_id": user_id,
+                        "expense_id": expense_id,
                         "action_name": action_name,
                         "reward": request.reward,
                         "uncertainty": uncertainty_score, #save to cloud

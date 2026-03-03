@@ -70,6 +70,10 @@ class PredictionResponse(BaseModel):
     notification: str   # The LLM message
     visual_theme: str   # "red", "blue"
     debug_info: dict    # Confidence scores
+    test_group: str = "adaptive"  
+    amount: float                 
+    category: str                 
+    features: dict
 
 # 4 The Feedback ( what android sends back)
 class FeedbackRequest(BaseModel):
