@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import datetime
 from fastapi.responses import HTMLResponse
 from fastapi import Request
+from fastapi import HTTPException
 
 # 1. SETUP PATH 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -25,9 +26,11 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 # 2. CLEAN IMPORTS 
 try:
-    from shared_core.schemas import PredictionRequest, PredictionResponse, FeedbackRequest
+    from shared_core.schemas import PredictionRequest, PredictionResponse, FeedbackRequest,LeaderboardUpdateRequest
     # Must import via zone_3_inference because we run from root
     from zone_3_inference.app.services.prediction_service import prediction_service
+    from zone_3_inference.app.services.leaderboard_service import LeaderboardService
+
 except ImportError as e:
     print(f" Import Error in main.py: {e}")
     print(f"   Sys Path: {sys.path}")
@@ -174,6 +177,33 @@ async def submit_feedback(request: FeedbackRequest, background_tasks: Background
         "message": f"Feedback for {request.prediction_id} queued for processing"
     }
 
+
+#  Gamification and Leaderboard endpoints
+@app.post("/gamification/v1/leaderboard/update")
+async def sync_xp(request: LeaderboardUpdateRequest):
+    """Android app calls this to silently back up the users's Xp"""
+    try:
+        service = LeaderboardService()
+        data = service.update_user_xp(
+            user_id = request.user_id,
+            anonymous_name = request.anonymous_name,
+            xp = request.xp,
+            tier =request.tier
+        )
+        return {"status": "Success","message":"Leaderboard updated"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@app.get("/gamification/v1/leaderboard/top")
+async def get_leaderboard():
+    """Android app calls this display the community Leaderboard"""
+    try:
+        service = LeaderboardService()
+        top_users = service.get_top_50()
+        return {"status": "success","data":top_users}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/admin/dashboard", tags=["Monitoring"])

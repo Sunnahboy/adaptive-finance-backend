@@ -308,7 +308,7 @@ class PredictionService:
             #Instantly delete the data from memory to prevent RAM leaks!
             try:
                 
-                await self.advisor.cache.delete(cache_key) 
+                await self.advisor.cache.remove(cache_key) 
             except Exception as e:
                 logger.warning(f"Could not clear cache for {cache_key}: {e}")
             #2 Reconstruct math

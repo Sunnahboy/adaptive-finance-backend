@@ -80,3 +80,10 @@ class FeedbackRequest(BaseModel):
     """The lightweight payload the android app sends back."""
     prediction_id: str = Field(..., description= "The UUID returned by the predict endpoint")
     reward: float = Field(..., description= "1.0 if user engaged, 0.0 if dismissed/ignored")
+
+
+class LeaderboardUpdateRequest(BaseModel):
+    user_id: str
+    anonymous_name: str
+    xp: int
+    tier: str
