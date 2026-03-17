@@ -23,7 +23,7 @@ class LinUCB:
                  n_features: int, 
                  alpha: float = 0.5, 
                  allow_diagonal: bool = False, 
-                 decay_factor: float = 1.0, 
+                 decay_factor: float = 0.98, 
                  decay_strategy: str = 'interpolation',
                  epsilon: float = 1e-10, 
                  min_exploration: float = 0.01,
