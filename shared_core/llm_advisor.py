@@ -94,6 +94,16 @@ class AsyncSQLiteCache:
                 return None
         except Exception:
             return None
+    
+    async def remove(self, key: str):
+        """Manually remove a specific key from the cache after feedback."""
+        try:
+            import aiosqlite # Ensure this is imported at the top of your file
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute("DELETE FROM cache WHERE key = ?", (key,))
+                await db.commit()
+        except Exception as e:
+            logger.warning(f"Cache removal failed for {key}: {e}")
 
     async def put(self, key: str, value: str):
         """Insert value and manage eviction asynchronously."""
