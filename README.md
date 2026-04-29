@@ -51,6 +51,7 @@ The backend operates on a highly available, cloud-native architecture deployed o
 
 The project follows a strict **Micro-Zoned Architecture** to separate Data Science logic from Web Backend logic.
 
+
 ```text
 adaptive_finance_ai/
 ├── Dockerfile                       # Containerization for cloud deployment
