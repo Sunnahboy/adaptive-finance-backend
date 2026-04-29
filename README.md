@@ -53,37 +53,40 @@ The project follows a strict **Micro-Zoned Architecture** to separate Data Scien
 
 ```text
 adaptive_finance_ai/
-├── scripts/
-│   └── sign_models.py           # Cryptographically signs trained models (.pkl) with HMAC
-├── shared_core/                 # Shared resources between Training and Inference
-│   ├── features.py              # Centralized feature engineering and definitions
-│   ├── llm_advisor.py           # Async Google Gemini integration & Circuit Breaker
-│   ├── models.py                # Custom LinUCB Contextual Bandit implementation
-│   ├── preprocessing.py         # KBinsDiscretizer & Log1p math pipelines
-│   └── schemas.py               # Strict Pydantic contracts for API validation
-├── zone_1_training/             # Offline Data Science & Machine Learning
-│   ├── src/
-│   │   ├── cmab_env.py          # Simulated environment for reinforcement learning
-│   │   └── cmab_visualizations.py # Generates the 9-panel object-oriented dashboard
-│   ├── synthetic_data.py        # Generates Kenyan market user data for pre-training
-│   └── trainer.py               # Main training script (Teacher Forcing & Epsilon Decay)
-├── zone_2_artifacts/            # The "Vault" (Secure Bridge between Zones 1 and 3)
-│   ├── bandit_model.pkl         # The trained LinUCB brain (Binary)
-│   ├── bandit_model.pkl.sig     # The HMAC SHA-256 signature for the bandit
-│   ├── cmab_preprocessor.pkl    # The trained feature scaler/binner (Binary)
-│   ├── cmab_preprocessor.pkl.sig# The HMAC SHA-256 signature for the preprocessor
-│   ├── training_config.json     # Action map and training metadata
-│   └── cmab_comprehensive_analysis.png # Visual proof of AI learning convergence
-├── zone_3_inference/            # Production Web Backend
-│   └── app/
-│       ├── main.py              # FastAPI Gateway (CORS, Background Tasks, Endpoints)
-│       ├── templates/           # Jinja2 HTML templates for the Web Dashboard
-│       │   └── dashboard.html   # Chart.js UI for real-time model monitoring
-│       └── services/
-│           └── prediction_service.py # Core logic bridging the Bandit, LLM, and UUID Cache
-├── .env                         # Environment variables (Ignored in Git)
-├── .gitignore                   # Prevents secret keys and SQLite databases from leaking
-└── requirements.txt             # Python dependencies (aiosqlite, fastapi, google-genai, etc.)
+├── Dockerfile                       # Containerization for cloud deployment
+├── .env                             # Environment variables (API keys, CORS origins)
+├── scripts/                         
+│   └── sign_models.py               # HMAC-SHA256 cryptographic signature generator
+├── shared_core/                     # Shared Domain Logic (DRY Principle)
+│   ├── features.py                  # KBinsDiscretizer & Log1p pipelines
+│   ├── llm_advisor.py               # Async Gemini integration & Circuit Breaker
+│   ├── models.py                    # LinUCB Contextual Bandit implementation
+│   └── schemas.py                   # Pydantic data validation API contracts
+├── tests/                           # System and Integration Test Suite
+│   └── test_llm.py                  # LLM routing and fallback tests
+├── zone_1_training/                 # Offline ML Pipeline (Data Science Zone)
+│   ├── data/                        # Tiered Data Engineering Pipeline
+│   │   ├── raw/                     # Bronze: Original unprocessed data (online_retail_II)
+│   │   ├── interim/                 # Silver: Partially cleaned transactions
+│   │   └── processed/               # Gold: Final scaled ML-ready datasets
+│   ├── notebooks/                   # Exploratory Data Analysis (EDA)
+│   │   ├── 01_data_loading and cleaning.ipynb
+│   │   └── 03_feature_engineering.ipynb
+│   ├── src/                         
+│   │   └── cmab_visualizations.py   # 9-panel matplotlib convergence dashboard
+│   └── trainer.py                   # Main orchestrator (Teacher forcing, epsilon decay)
+├── zone_2_artifacts/                # Model Vault (Secure Bridge)
+│   ├── bandit_model.pkl             # Serialized LinUCB model weights
+│   ├── bandit_model.pkl.sig         # HMAC-SHA256 integrity signature
+│   └── training_config.json         # Hyperparameters and action maps
+└── zone_3_inference/                # Production Backend (FastAPI Service)
+    └── app/                         
+        ├── main.py                  # API gateway, CORS, and background tasks
+        ├── services/                
+        │   ├── leaderboard_service.py # MLOps analytics logging
+        │   └── prediction_service.py  # Bandit inference + LLM routing caching
+        └── templates/               
+            └── dashboard.html       # Chart.js admin dashboard
 
 ```
 
