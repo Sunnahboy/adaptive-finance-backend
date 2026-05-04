@@ -70,33 +70,45 @@ class PredictionService:
     
 
 
-    def download_latest_brain(self):
-        """Downloads the latest .pkl and sign from supabase on startup"""
+    def download_latest_brain(self) -> bool:
+        """Downloads all required .pkl and .sig artifacts from Supabase on startup"""
         if not self.supabase:
             logger.warning("Supabase not configured skipping cloud model download")
             return False
         
         base_path = Path(__file__).resolve().parent.parent.parent.parent
-        model_path = base_path / "zone_2_artifacts" / "bandit_model.pkl"
-        sig_path = model_path.with_suffix('.pkl.sig')
+        artifacts_dir = base_path / "zone_2_artifacts"
+        
+        # List of all files the server needs to be 'whole'
+        artifacts = [
+            "bandit_model.pkl", 
+            "bandit_model.pkl.sig",
+            "cmab_preprocessor.pkl",
+            "cmab_preprocessor.pkl.sig"
+        ]
 
         try:
-            logger.info(" Downloading latest AI brain from Supabase...")
-            #Download Model
-            model_bytes = self.supabase.storage.from_("ai-models").download("bandit_model.pkl")
-            with open(model_path, "wb") as f:
-                f.write(model_bytes)
+            logger.info(" Synchronizing Hybrid AI artifacts from Supabase...")
+            
+            for filename in artifacts:
+                file_path = artifacts_dir / filename
                 
-            # Download Signature
-            sig_bytes = self.supabase.storage.from_("ai-models").download("bandit_model.pkl.sig")
-            with open(sig_path, "wb") as f:
-                f.write(sig_bytes)
+                # Download from 'ai-models' bucket
+                model_bytes = self.supabase.storage.from_("ai-models").download(filename)
                 
-            logger.info(" Successfully loaded cloud brain.")
+                with open(file_path, "wb") as f:
+                    f.write(model_bytes)
+                
+                logger.info(f"   Successfully synced: {filename}")
+                
+            logger.info(" Cloud synchronization complete. Ready to load resources.")
             return True
+            
         except Exception as e:
-            logger.warning(f"Cloud download failed (Using local GitHub baseline): {e}")
+            logger.warning(f"Cloud sync failed (Falling back to local artifacts): {e}")
             return False
+        
+
 
 
 
@@ -167,6 +179,10 @@ class PredictionService:
             
             with open(bandit_path, "rb") as f:
                 self.bandit = pickle.load(f)
+                
+            #THE HYBRID SHIFT: Switch from Offline (1.0) to Live Online Mode (0.90)
+            self.bandit.decay_factor = 0.90
+            logger.info(" Shifted Bandit to Live Online Mode (Decay: 0.90)")
             
             # 2. Load Preprocessor (With Security Check)
             prep_path = artifacts_dir / "cmab_preprocessor.pkl"

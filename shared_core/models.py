@@ -21,10 +21,10 @@ class LinUCB:
     def __init__(self, 
                  n_arms: int, 
                  n_features: int, 
-                 alpha: float = 0.5, 
+                 alpha: float = 2.5, 
                  allow_diagonal: bool = False, 
-                 decay_factor: float = 0.98, 
-                 decay_strategy: str = 'interpolation',
+                 decay_factor: float = 0.90, 
+                 decay_strategy: str = 'scale',
                  epsilon: float = 1e-10, 
                  min_exploration: float = 0.01,
                  lambda_reg: float = 1.0):

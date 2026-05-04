@@ -68,10 +68,10 @@ REWARD_CONFIG = {
 
 # hyperparameters 
 TRAINING_CONFIG = {
-    "alpha": 0.5,                # High exploration for bootstrapping (prevent overconfidence)
+    "alpha": 2.5,                # High exploration for bootstrapping (prevent overconfidence)
     "allow_diagonal": False,     # Full covariance matrix for accuracy
-    "decay_factor": 1.0,        
-    "decay_strategy": "interpolation",
+    "decay_factor": 1,        
+    "decay_strategy": "scale",
     "use_teacher_forcing": True, # Critical for learning
 }
 
