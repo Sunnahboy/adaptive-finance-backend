@@ -19,18 +19,18 @@
     "high_value_threshold": 50
   },
   "training_config": {
-    "alpha": 0.5,
+    "alpha": 2.5,
     "allow_diagonal": false,
-    "decay_factor": 1.0,
-    "decay_strategy": "interpolation",
+    "decay_factor": 1,
+    "decay_strategy": "scale",
     "use_teacher_forcing": true
   },
   "metrics": {
-    "accuracy": 0.7867730900798175,
-    "avg_regret": 0.010262257696693273,
+    "accuracy": 0.7628278221208666,
+    "avg_regret": 0.03420752565564424,
     "training_samples": 3504,
     "test_samples": 877,
-    "training_time_seconds": 3.599247694015503,
-    "timestamp": 1771517921.5882304
+    "training_time_seconds": 3.7759804725646973,
+    "timestamp": 1777906296.2493038
   }
 }
