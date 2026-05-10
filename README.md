@@ -126,8 +126,8 @@ Create a `.env` file in the root directory:
 GEMINI_API_KEY=your_google_gemini_key_here
 
 # --- Security ---
-API_ACCESS_TOKEN=my_thesis_access_token_2026
-MODEL_SIGNING_KEY=my_super_secret_thesis_key_2026
+API_ACCESS_TOKEN=secure_token_here
+MODEL_SIGNING_KEY=signing_key_here
 
 # --- CORS Rules ---
 ALLOWED_ORIGINS=http://localhost:8000,http://10.0.2.2:8000,https://adaptivefinance.duckdns.org
@@ -232,7 +232,7 @@ cp /mnt/c/Users/User/Downloads/fyp-key.pem ~
 chmod 400 ~/fyp-key.pem
 
 # Establish a secure SSH tunnel into the EC2 instance
-ssh -i "~/fyp-key.pem" ubuntu@3.26.148.159
+ssh -i "~/fyp-key.pem" ubuntu@EC2_IP
 
 ```
 
