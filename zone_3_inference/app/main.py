@@ -26,7 +26,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 # 2. CLEAN IMPORTS 
 try:
-    from shared_core.schemas import PredictionRequest, PredictionResponse, FeedbackRequest,LeaderboardUpdateRequest
+    from shared_core.schemas import PredictionRequest, PredictionResponse, FeedbackRequest,LeaderboardUpdateRequest,CheerRequest
     # Must import via zone_3_inference because we run from root
     from zone_3_inference.app.services.prediction_service import prediction_service
     from zone_3_inference.app.services.leaderboard_service import LeaderboardService
@@ -178,32 +178,61 @@ async def submit_feedback(request: FeedbackRequest, background_tasks: Background
     }
 
 
-#  Gamification and Leaderboard endpoints
-@app.post("/gamification/v1/leaderboard/update")
+# --- GAMIFICATION and LEADERBOARD ENDPOINTS ---
+
+@app.post("/gamification/v1/leaderboard/update", dependencies=[Depends(verify_api_key)])
 async def sync_xp(request: LeaderboardUpdateRequest):
-    """Android app calls this to silently back up the users's Xp"""
+    """Android app calls this to silently back up the user's XP and Tier."""
     try:
         service = LeaderboardService()
         data = service.update_user_xp(
-            user_id = request.user_id,
-            anonymous_name = request.anonymous_name,
-            xp = request.xp,
-            tier =request.tier
+            user_id=request.user_id,
+            anonymous_name=request.anonymous_name,
+            xp=request.xp,
+            tier=request.tier
         )
-        return {"status": "Success","message":"Leaderboard updated"}
+        return {"status": "success", "message": "Leaderboard updated"}
     except Exception as e:
+        logger.error(f"Sync XP Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    
 
-@app.get("/gamification/v1/leaderboard/top")
+
+
+
+@app.get("/gamification/v1/leaderboard/top", dependencies=[Depends(verify_api_key)])
 async def get_leaderboard():
-    """Android app calls this display the community Leaderboard"""
+    """Android app calls this to display the community Leaderboard."""
     try:
         service = LeaderboardService()
         top_users = service.get_top_50()
-        return {"status": "success","data":top_users}
+        return {"status": "success", "data": top_users}
     except Exception as e:
+        logger.error(f"Fetch Leaderboard Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/gamification/v1/leaderboard/cheer", dependencies=[Depends(verify_api_key)])
+async def send_cheer(request: CheerRequest):
+    """Endpoint triggered by Android Double-Tap gesture."""
+    try:
+        service = LeaderboardService()
+        return service.register_cheer(request.target_user_id)
+    except Exception as e:
+        logger.error(f"Cheer Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to register cheer")
+    
+
+    
+@app.get("/gamification/v1/leaderboard/history", dependencies=[Depends(verify_api_key)], tags=["Gamification"])
+async def get_leaderboard_history():
+    """Returns Hall of Fame winners for the Android UI."""
+    try:
+        service = LeaderboardService()
+        return {"status": "success", "data": service.get_historical_winners()}
+    except Exception as e:
+        logger.error(f"Hall of Fame Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 
 @app.get("/admin/dashboard", tags=["Monitoring"])

@@ -87,3 +87,5 @@ class LeaderboardUpdateRequest(BaseModel):
     anonymous_name: str
     xp: int
     tier: str
+class CheerRequest(BaseModel):
+    target_user_id: str
