@@ -8,17 +8,12 @@ import logging
 import json
 import uuid
 import numpy as np
-from supabase import create_client,Client
-
-
-import pandas as pd  
+from supabase import create_client,Client 
 from pathlib import Path
 from typing import Optional, Dict
-from fastapi.concurrency import run_in_threadpool
 
 #for dashboard logging
-import time
-import aiosqlite
+
 
 # CLEAN IMPORTS (Assumes 'pip install -e .' was run)
 try:
