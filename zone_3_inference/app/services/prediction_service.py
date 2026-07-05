@@ -44,7 +44,7 @@ class PredictionService:
         self.preprocessor: Optional[BanditPreprocessor] = None
         self.advisor: Optional[LLMStrategyAdvisor] = None
         
-        # Action Map (Must match Trainer) load from training_config.json
+        # Action Map (Must match Trainer) loads from training_config.json
         self.actions : Dict[int,str] = {}
         self._is_ready = False
         
@@ -66,7 +66,7 @@ class PredictionService:
 
        #micro-batch setup
         self._click_counter = 0
-        self.BATCH_SIZE = 5 # 5 for faster local testing increase later in production
+        self.BATCH_SIZE = 5 # 5 for faster local testing 
     
 
 
